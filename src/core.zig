@@ -88,13 +88,14 @@ fn seedAxioms() !void {
     const seed = @import("core/seed_knowledge.zig");
 
     // Track axiom IDs for prerequisite linking.
-    var axiom_ids: [512]u32 = undefined;
+    // Size must be >= SEED_AXIOMS.len (currently 623).
+    var axiom_ids: [1024]u32 = undefined;
 
     for (seed.SEED_AXIOMS, 0..) |sa, i| {
         // Add the axiom to the store.
         var prereq_ids: [4]u32 = .{ 0, 0, 0, 0 };
         for (sa.prereq_indices, 0..) |pi, j| {
-            if (j < 4 and pi < axiom_ids.len) {
+            if (j < 4 and pi < axiom_ids.len and pi < i) {
                 prereq_ids[j] = axiom_ids[pi];
             }
         }
@@ -111,7 +112,7 @@ fn seedAxioms() !void {
     }
 
     // Add cross-domain entanglements.
-    if (axiom_ids.len > 5) {
+    if (seed.SEED_AXIOMS.len > 60) {
         try g.entangle(axiom_ids[4], axiom_ids[57], .analogy, 0.7); // quantum ↔ AI
         try g.entangle(axiom_ids[40], axiom_ids[2], .isomorphism, 0.8); // diffusion ↔ heat
         try g.entangle(axiom_ids[28], axiom_ids[57], .similarity, 0.4); // DNA ↔ info
