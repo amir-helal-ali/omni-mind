@@ -525,11 +525,8 @@ fn generateNaturalAnswer(
     const out = out_buf.*;
     var pos: usize = 0;
 
-    // 0. Echo the query
-    writeStr(out, &pos, Labels.query_label(answer_lang));
-    writeStr(out, &pos, ": \"");
-    writeStr(out, &pos, query);
-    writeStr(out, &pos, "\". ");
+    // 0. Skip echoing the query — make it feel like a natural conversation.
+    //    The user already knows what they asked.
 
     // 1. Find the best partial answer
     var best_idx: usize = 0;
@@ -563,7 +560,7 @@ fn generateNaturalAnswer(
         }
     }
 
-    // 4. Generate the natural language sentence
+    // 4. Generate the natural language sentence (the main conversational answer)
     const domain_name = lang.domainName(domain, answer_lang);
     const gen_len = conv.generateAnswer(
         axiom_text,
@@ -575,31 +572,20 @@ fn generateNaturalAnswer(
         out[pos..],
     );
     pos += gen_len;
-    writeStr(out, &pos, " ");
+    writeStr(out, &pos, "\n\n");
 
-    // 5. Add metadata
-    writeStr(out, &pos, "[");
-    writeStr(out, &pos, lang.domainName(domain, answer_lang));
-    writeStr(out, &pos, " · ");
-
+    // 5. Add minimal metadata footer (subtle, not distracting)
+    writeStr(out, &pos, "— ");
     var conf_buf: [32]u8 = undefined;
-    const conf_str = std.fmt.bufPrint(&conf_buf, "{s}: {d:.2}", .{
+    const conf_str = std.fmt.bufPrint(&conf_buf, "{s}: {d:.0}%", .{
         Labels.confidence_label(answer_lang),
-        confidence,
+        confidence * 100.0,
     }) catch "";
     writeStr(out, &pos, conf_str);
 
-    writeStr(out, &pos, " · ");
-    writeStr(out, &pos, lang.dimensionName(@intCast(best_idx), answer_lang));
-
-    if (tunnel_used) {
-        writeStr(out, &pos, " · ↯");
-    }
-
     const elapsed: i64 = std.time.milliTimestamp() - start_ts;
     var lat_buf: [32]u8 = undefined;
-    const lat_str = std.fmt.bufPrint(&lat_buf, " · {s}: {d}{s}]", .{
-        Labels.latency_label(answer_lang),
+    const lat_str = std.fmt.bufPrint(&lat_buf, " · {d}{s}", .{
         elapsed,
         Labels.ms_unit(answer_lang),
     }) catch "";

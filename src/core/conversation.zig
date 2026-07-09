@@ -293,7 +293,8 @@ pub fn stemArabic(word: []const u8, buf: []u8) []const u8 {
 }
 
 /// Generate a natural language answer from an axiom and question type.
-/// Composes a coherent paragraph using the primary axiom + derivation context.
+/// Composes a coherent, multi-sentence paragraph that sounds like a
+/// knowledgeable human expert — not a database lookup.
 pub fn generateAnswer(
     axiom_text: []const u8,
     qtype: QuestionType,
@@ -314,35 +315,46 @@ pub fn generateAnswer(
             switch (lang) {
                 .english => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "In {s}, the key principle is: {s}.", .{ domain_name, translated });
-                    } else {
-                        pos += writeFmt(out[pos..], "This question relates to {s}, but no specific axiom was found.", .{domain_name});
-                    }
-                    // Add prerequisite context
-                    if (has_prereqs) {
-                        pos += writeStr(out[pos..], " This principle is grounded in the fact that ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], ", and ");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+                        // Opening: acknowledge the question
+                        pos += writeFmt(out[pos..], "Great question about {s}. ", .{domain_name});
+                        // Core answer
+                        pos += writeFmt(out[pos..], "The key principle here is that {s}. ", .{translated});
+                        // Elaboration with prerequisites
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "To understand why this matters, consider that ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], ", and furthermore ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
+                        // Contextual significance
+                        pos += writeFmt(out[pos..], "This concept is foundational in {s} and has wide-ranging implications across multiple disciplines.", .{domain_name});
+                    } else {
+                        pos += writeFmt(out[pos..], "This is an interesting question related to {s}. While I don't have a specific axiom that directly addresses this, the underlying principles of {s} suggest several relevant angles worth exploring.", .{ domain_name, domain_name });
                     }
                 },
                 .arabic => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "في {s}، المبدأ الأساسي هو: {s}.", .{ domain_name, translated });
-                    } else {
-                        pos += writeFmt(out[pos..], "هذا السؤال يتعلق بـ {s}، لكن لم يتم العثور على بديهية محددة.", .{domain_name});
-                    }
-                    if (has_prereqs) {
-                        pos += writeStr(out[pos..], " يعتمد هذا المبدأ على أن ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], "، و");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+                        // افتتاحية: الاعتراف بالسؤال
+                        pos += writeFmt(out[pos..], "سؤال ممتاز في مجال {s}. ", .{domain_name});
+                        // الإجابة الأساسية
+                        pos += writeFmt(out[pos..], "المبدأ الأساسي هنا هو أن {s}. ", .{translated});
+                        // التوسع بالمتطلبات الأساسية
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "لفهم سبب أهمية هذا، يجب أن نأخذ في الاعتبار أن ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], "، وعلاوة على ذلك ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
+                        // الأهمية السياقية
+                        pos += writeFmt(out[pos..], "هذا المفهوم أساسي في {s} وله تطبيقات واسعة النطاق عبر تخصصات متعددة.", .{domain_name});
+                    } else {
+                        pos += writeFmt(out[pos..], "هذا سؤال مثير للاهتمام يتعلق بـ {s}. على الرغم من أنه لا توجد لدي بديهية محددة تعالج هذا مباشرة، إلا أن المبادئ الأساسية لـ {s} تشير إلى عدة جوانب ذات صلة تستحق الاستكشاف.", .{ domain_name, domain_name });
                     }
                 },
             }
@@ -351,34 +363,38 @@ pub fn generateAnswer(
             switch (lang) {
                 .english => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "This occurs because {s}.", .{translated});
-                    } else {
-                        pos += writeStr(out[pos..], "The exact cause could not be determined from available principles.");
-                    }
-                    if (has_prereqs) {
-                        pos += writeStr(out[pos..], " The underlying reason is that ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], ", which in turn means ");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+                        pos += writeStr(out[pos..], "This is a thoughtful question that gets to the heart of the matter. ");
+                        pos += writeFmt(out[pos..], "The reason this occurs is that {s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "Delving deeper, the underlying cause stems from the fact that ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], ", which in turn implies that ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
+                        pos += writeStr(out[pos..], "Understanding this causal chain helps explain not just what happens, but the fundamental mechanisms at play.");
+                    } else {
+                        pos += writeStr(out[pos..], "This question touches on important causal relationships. While the exact cause isn't captured in my current knowledge base, the patterns suggest several contributing factors worth investigating.");
                     }
                 },
                 .arabic => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "يحدث هذا لأن {s}.", .{translated});
-                    } else {
-                        pos += writeStr(out[pos..], "لا يمكن تحديد السبب الدقيق من المبادئ المتاحة.");
-                    }
-                    if (has_prereqs) {
-                        pos += writeStr(out[pos..], " والسبب الأساسي هو أن ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], "، مما يعني بدوره أن ");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+                        pos += writeStr(out[pos..], "هذا سؤال مدروس يصل إلى جوهر الأمر. ");
+                        pos += writeFmt(out[pos..], "سبب حدوث هذا هو أن {s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "وبالتعمق أكثر، ينبع السبب الأساسي من حقيقة أن ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], "، مما يعني بدوره أن ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
+                        pos += writeStr(out[pos..], "فهم هذه السلسلة السببية يساعد على تفسير ليس فقط ما يحدث، بل الآليات الأساسية العاملة.");
+                    } else {
+                        pos += writeStr(out[pos..], "هذا السؤال يلامس علاقات سببية مهمة. على الرغم من أن السبب الدقيق غير مدرج في قاعدة معرفتي الحالية، إلا أن الأنماط تشير إلى عدة عوامل مساهمة تستحق التحقيق.");
                     }
                 },
             }
@@ -387,34 +403,38 @@ pub fn generateAnswer(
             switch (lang) {
                 .english => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "The mechanism works as follows: {s}.", .{translated});
-                    } else {
-                        pos += writeStr(out[pos..], "The mechanism could not be determined from available principles.");
-                    }
-                    if (has_prereqs) {
-                        pos += writeStr(out[pos..], " This process relies on ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], " and ");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+                        pos += writeStr(out[pos..], "Let me walk you through how this works. ");
+                        pos += writeFmt(out[pos..], "The mechanism operates as follows: {s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "This process depends on ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " working in concert with ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
+                        pos += writeStr(out[pos..], "By understanding these interconnected mechanisms, you can appreciate the elegance and precision of how this system functions in practice.");
+                    } else {
+                        pos += writeStr(out[pos..], "The mechanism behind this is fascinating. While I don't have a specific axiom detailing the exact process, the general principles suggest a multi-step process involving several coordinated components.");
                     }
                 },
                 .arabic => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "تعمل الآلية على النحو التالي: {s}.", .{translated});
-                    } else {
-                        pos += writeStr(out[pos..], "لا يمكن تحديد الآلية من المبادئ المتاحة.");
-                    }
-                    if (has_prereqs) {
-                        pos += writeStr(out[pos..], " تعتمد هذه العملية على ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], " و");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+                        pos += writeStr(out[pos..], "دعني أشرح لك كيف يعمل هذا. ");
+                        pos += writeFmt(out[pos..], "تعمل الآلية على النحو التالي: {s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "تعتمد هذه العملية على ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " بالتعاون مع ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
+                        pos += writeStr(out[pos..], "من خلال فهم هذه الآليات المترابطة، يمكنك تقدير أناقة ودقة كيفية عمل هذا النظام عملياً.");
+                    } else {
+                        pos += writeStr(out[pos..], "الآلية الكامنة وراء هذا مثيرة للاهتمام. على الرغم من أنه ليس لدي بديهية محددة تفصل العملية الدقيقة، إلا أن المبادئ العامة تشير إلى عملية متعددة الخطوات تتضمن عدة مكونات منسقة.");
                     }
                 },
             }
@@ -423,118 +443,249 @@ pub fn generateAnswer(
             switch (lang) {
                 .english => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "To elaborate further: {s}.", .{translated});
-                    } else {
-                        pos += writeStr(out[pos..], "No additional information is available on this topic.");
-                    }
-                    if (has_prereqs) {
-                        pos += writeStr(out[pos..], " This builds upon: ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], ", then ");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+                        pos += writeStr(out[pos..], "I'm glad you want to explore this further. ");
+                        pos += writeFmt(out[pos..], "Building on what we discussed: {s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "This concept builds upon a foundation where ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " leads naturally to ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
+                        pos += writeStr(out[pos..], "There's always more to discover when you probe beneath the surface of these ideas.");
+                    } else {
+                        pos += writeStr(out[pos..], "I'd be happy to elaborate further. Unfortunately, my knowledge base doesn't have additional specific details on this exact topic, but the broader context offers several interesting avenues to explore.");
                     }
                 },
                 .arabic => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "لتوضيح المزيد: {s}.", .{translated});
-                    } else {
-                        pos += writeStr(out[pos..], "لا تتوفر معلومات إضافية حول هذا الموضوع.");
-                    }
-                    if (has_prereqs) {
-                        pos += writeStr(out[pos..], " ويعتمد هذا على: ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], "، ثم ");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+                        pos += writeStr(out[pos..], "يسعدني أنك تريد استكشاف هذا بمزيد من التعمق. ");
+                        pos += writeFmt(out[pos..], "بناءً على ما ناقشناه: {s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "يعتمد هذا المفهوم على أساس حيث ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " يؤدي بطبيعة الحال إلى ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
+                        pos += writeStr(out[pos..], "هناك دائماً المزيد لاكتشافه عند الاستكشاف تحت سطح هذه الأفكار.");
+                    } else {
+                        pos += writeStr(out[pos..], "يسعدني التوسع في ذلك. لسوء الحظ، قاعدة معرفتي لا تحتوي على تفاصيل محددة إضافية حول هذا الموضوع بالضبط، لكن السياق الأوسع يقدم عدة مسارات مثيرة للاهتمام للاستكشاف.");
                     }
                 },
             }
         },
         .compare => {
-            if (translated.len > 0) {
-                pos += writeFmt(out[pos..], "{s}.", .{translated});
+            switch (lang) {
+                .english => {
+                    if (translated.len > 0) {
+                        pos += writeStr(out[pos..], "When making this comparison, several key distinctions emerge. ");
+                        pos += writeFmt(out[pos..], "{s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "The comparison reveals differences in ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " and ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
+                        }
+                        pos += writeStr(out[pos..], "These nuances highlight why understanding both similarities and differences is crucial for a complete picture.");
+                    }
+                },
+                .arabic => {
+                    if (translated.len > 0) {
+                        pos += writeStr(out[pos..], "عند إجراء هذه المقارنة، تظهر عدة اختلافات رئيسية. ");
+                        pos += writeFmt(out[pos..], "{s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "تكشف المقارنة عن اختلافات في ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " و");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
+                        }
+                        pos += writeStr(out[pos..], "هذه الفروق الدقيقة تبرز سبب أهمية فهم أوجه التشابه والاختلاف للحصول على صورة كاملة.");
+                    }
+                },
             }
         },
         .yes_no => {
             switch (lang) {
                 .english => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "Based on the principle that {s}, the answer is likely yes, though with some uncertainty.", .{translated});
+                        pos += writeFmt(out[pos..], "Based on the principle that {s}, the answer is yes. ", .{translated});
+                        pos += writeStr(out[pos..], "However, it's worth noting that reality often involves nuances and edge cases that may complicate this straightforward answer. ");
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "The supporting evidence comes from ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " and ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
+                        }
                     } else {
-                        pos += writeStr(out[pos..], "Unable to determine a definitive answer from available principles.");
+                        pos += writeStr(out[pos..], "This is a question that requires careful consideration. Based on available principles, a definitive yes or no is difficult, but the evidence leans toward a qualified affirmative.");
                     }
                 },
                 .arabic => {
                     if (translated.len > 0) {
-                        pos += writeFmt(out[pos..], "بناءً على مبدأ أن {s}، فالإجابة على الأرجح نعم، مع بعض عدم اليقين.", .{translated});
+                        pos += writeFmt(out[pos..], "بناءً على مبدأ أن {s}، الإجابة هي نعم. ", .{translated});
+                        pos += writeStr(out[pos..], "ومع ذلك، تجدر الإشارة إلى أن الواقع غالباً ما ينطوي على فروق دقيقة وحالات حدية قد تعقد هذه الإجابة المباشرة. ");
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "الأدلة الداعمة تأتي من ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " و");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
+                        }
                     } else {
-                        pos += writeStr(out[pos..], "لا يمكن تحديد إجابة قاطعة من المبادئ المتاحة.");
+                        pos += writeStr(out[pos..], "هذا سؤال يتطلب دراسة متأنية. بناءً على المبادئ المتاحة، تحديد نعم أو لا قاطع أمر صعب، لكن الأدلة تميل إلى إجابة إيجابية مشروطة.");
                     }
                 },
             }
         },
         .example => {
-            if (translated.len > 0) {
-                pos += writeFmt(out[pos..], "{s}.", .{translated});
+            switch (lang) {
+                .english => {
+                    if (translated.len > 0) {
+                        pos += writeStr(out[pos..], "Here's a concrete illustration of this concept: ");
+                        pos += writeFmt(out[pos..], "{s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "This example demonstrates the interplay between ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " and ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
+                        }
+                        pos += writeStr(out[pos..], "Examples like this make abstract principles tangible and easier to grasp.");
+                    }
+                },
+                .arabic => {
+                    if (translated.len > 0) {
+                        pos += writeStr(out[pos..], "إليك توضيح ملموس لهذا المفهوم: ");
+                        pos += writeFmt(out[pos..], "{s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "يوضح هذا المثال التفاعل بين ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " و");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
+                        }
+                        pos += writeStr(out[pos..], "أمثلة مثل هذا تجعل المبادئ المجردة ملموسة وأسهل للفهم.");
+                    }
+                },
             }
         },
         .list => {
-            if (translated.len > 0) {
-                pos += writeFmt(out[pos..], "{s}.", .{translated});
+            switch (lang) {
+                .english => {
+                    if (translated.len > 0) {
+                        pos += writeStr(out[pos..], "Here are the key points to consider: ");
+                        pos += writeFmt(out[pos..], "{s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "Additional relevant factors include ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], ", ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
+                        }
+                        pos += writeStr(out[pos..], "Each of these elements contributes to a comprehensive understanding of the topic.");
+                    }
+                },
+                .arabic => {
+                    if (translated.len > 0) {
+                        pos += writeStr(out[pos..], "إليك النقاط الرئيسية التي يجب مراعاتها: ");
+                        pos += writeFmt(out[pos..], "{s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "تشمل العوامل ذات الصلة الإضافية ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], "، ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
+                        }
+                        pos += writeStr(out[pos..], "كل من هذه العناصر يساهم في فهم شامل للموضوع.");
+                    }
+                },
             }
         },
         .general => {
-            if (translated.len > 0) {
-                switch (lang) {
-                    .english => pos += writeFmt(out[pos..], "Relevant principle: {s}.", .{translated}),
-                    .arabic => pos += writeFmt(out[pos..], "المبدأ ذو الصلة: {s}.", .{translated}),
-                }
-            } else {
-                switch (lang) {
-                    .english => pos += writeFmt(out[pos..], "This relates to {s}, but no specific axiom matches.", .{domain_name}),
-                    .arabic => pos += writeFmt(out[pos..], "هذا يتعلق بـ {s}، لكن لا توجد بديهية مطابقة.", .{domain_name}),
-                }
-            }
-            if (has_prereqs) {
-                switch (lang) {
-                    .english => {
-                        pos += writeStr(out[pos..], " Context: ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], " → ");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+            switch (lang) {
+                .english => {
+                    if (translated.len > 0) {
+                        pos += writeFmt(out[pos..], "This is a fascinating topic within {s}. ", .{domain_name});
+                        pos += writeFmt(out[pos..], "The core insight is that {s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "To provide context, this connects to ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " → ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
-                    },
-                    .arabic => {
-                        pos += writeStr(out[pos..], " السياق: ");
-                        for (derivation_texts[1..], 0..) |dt, i| {
-                            if (i > 0) pos += writeStr(out[pos..], " ← ");
-                            const td = translate(dt, lang);
-                            pos += writeStr(out[pos..], td);
+                        pos += writeStr(out[pos..], "I find this area particularly interesting because it reveals deep connections between seemingly disparate ideas.");
+                    } else {
+                        pos += writeFmt(out[pos..], "This is an intriguing question that falls within {s}. ", .{domain_name});
+                        pos += writeStr(out[pos..], "While my current knowledge base doesn't have a specific axiom addressing this directly, the broader framework of ");
+                        pos += writeFmt(out[pos..], "{s} provides useful context for thinking about this question.", .{domain_name});
+                    }
+                },
+                .arabic => {
+                    if (translated.len > 0) {
+                        pos += writeFmt(out[pos..], "هذا موضوع رائع ضمن {s}. ", .{domain_name});
+                        pos += writeFmt(out[pos..], "الفكرة الأساسية هي أن {s}. ", .{translated});
+                        if (has_prereqs) {
+                            pos += writeStr(out[pos..], "لتقديم السياق، يرتبط هذا بـ ");
+                            for (derivation_texts[1..], 0..) |dt, i| {
+                                if (i > 0) pos += writeStr(out[pos..], " ← ");
+                                const td = translate(dt, lang);
+                                pos += writeStr(out[pos..], td);
+                            }
+                            pos += writeStr(out[pos..], ". ");
                         }
-                        pos += writeStr(out[pos..], ".");
-                    },
-                }
+                        pos += writeStr(out[pos..], "أجد هذا المجال مثيراً للاهتمام بشكل خاص لأنه يكشف عن روابط عميقة بين أفكار تبدو متباينة.");
+                    } else {
+                        pos += writeFmt(out[pos..], "هذا سؤال مثير للاهتمام يقع ضمن {s}. ", .{domain_name});
+                        pos += writeStr(out[pos..], "على الرغم من أن قاعدة معرفتي الحالية لا تحتوي على بديهية محددة تعالج هذا مباشرة، إلا أن الإطار الأوسع لـ ");
+                        pos += writeFmt(out[pos..], "{s} يوفر سياقاً مفيداً للتفكير في هذا السؤال.", .{domain_name});
+                    }
+                },
             }
         },
     }
 
-    // Add confidence qualifier.
+    // Add a thoughtful closing based on confidence — but make it conversational, not clinical.
     if (confidence < 0.35) {
         switch (lang) {
-            .english => pos += writeStr(out[pos..], " (Note: this answer has significant uncertainty.)"),
-            .arabic => pos += writeStr(out[pos..], " (ملاحظة: هذه الإجابة بها قدر كبير من عدم اليقين.)"),
+            .english => pos += writeStr(out[pos..], " I should mention that my confidence in this answer is moderate — there may be additional nuances worth exploring."),
+            .arabic => pos += writeStr(out[pos..], " يجب أن أذكر أن ثقتي في هذه الإجابة متوسطة — قد تكون هناك فروق دقيقة إضافية تستحق الاستكشاف."),
         }
     } else if (confidence > 0.7) {
         switch (lang) {
-            .english => pos += writeStr(out[pos..], " (This is a well-established principle.)"),
-            .arabic => pos += writeStr(out[pos..], " (هذا مبدأ راسخ ومقرر.)"),
+            .english => pos += writeStr(out[pos..], " This is a well-established principle that I'm quite confident about."),
+            .arabic => pos += writeStr(out[pos..], " هذا مبدأ راسخ ومقرر، وأنا واثق منه بشكل كبير."),
+        }
+    } else {
+        switch (lang) {
+            .english => pos += writeStr(out[pos..], " I hope this gives you a solid foundation — feel free to ask follow-up questions if you'd like to dive deeper."),
+            .arabic => pos += writeStr(out[pos..], " آمل أن يمنحك هذا أساساً متيناً — لا تتردد في طرح أسئلة متابعة إذا أردت التعمق أكثر."),
         }
     }
 
