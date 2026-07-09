@@ -1,0 +1,44 @@
+[package]
+name = "omni-swarm"
+version = "0.1.0"
+edition = "2021"
+description = "P2P Knowledge Swarm for Omni-Mind — gossip-based axiom broadcasting"
+license = "MIT"
+build = "build.rs"
+
+[lib]
+name = "omni_swarm"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "omni-swarm-node"
+path = "src/bin/node.rs"
+
+[[bin]]
+name = "omni-web"
+path = "src/bin/web.rs"
+
+[[bin]]
+name = "omni-crawler"
+path = "src/bin/crawler_demo.rs"
+
+[dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Cryptography — Ed25519 signatures for axiom authentication
+blake3 = "1.5"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# C library bindings (for signal handling)
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

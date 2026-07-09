@@ -1,0 +1,115 @@
+# Omni-Mind Docker Compose — Multi-service orchestration
+#
+# Services:
+#   web      — HTTP API + Web UI (port 8080)
+#   tcp      — TCP server for programmatic clients (port 19090)
+#   swarm-1  — P2P node 1 (port 18101)
+#   swarm-2  — P2P node 2, peers with swarm-1 (port 18102)
+#   swarm-3  — P2P node 3, peers with swarm-1 + swarm-2 (port 18103)
+#
+# Usage:
+#   docker-compose up -d                    Start all services
+#   docker-compose up web                   Start only web
+#   docker-compose run --rm web verify      Run native Zig verification
+#   docker-compose run --rm web bench       Run 1000-question benchmark
+#   docker-compose run --rm web repl        Interactive REPL
+#   docker-compose logs -f web              Follow web logs
+#   docker-compose down                     Stop all services
+
+version: "3.9"
+
+services:
+  # ─── Web Server (HTTP API + UI) ─────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omni-web
+    ports:
+      - "8080:8080"
+    command: ["web"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - omni-net
+    labels:
+      - "com.omni-mind.service=web"
+      - "com.omni-mind.version=0.2.0"
+
+  # ─── TCP Server ─────────────────────────────────────
+  tcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omni-tcp
+    ports:
+      - "19090:19090"
+    command: ["tcp"]
+    restart: unless-stopped
+    networks:
+      - omni-net
+    labels:
+      - "com.omni-mind.service=tcp"
+
+  # ─── P2P Swarm Node 1 ───────────────────────────────
+  swarm-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omni-swarm-1
+    ports:
+      - "18101:18101"
+    command: ["swarm"]
+    restart: unless-stopped
+    networks:
+      - omni-net
+    labels:
+      - "com.omni-mind.service=swarm"
+      - "com.omni-mind.node=1"
+
+  # ─── P2P Swarm Node 2 (peers with swarm-1) ─────────
+  swarm-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omni-swarm-2
+    ports:
+      - "18102:18102"
+    command: ["swarm", "18102", "swarm-1:18101"]
+    restart: unless-stopped
+    depends_on:
+      - swarm-1
+    networks:
+      - omni-net
+    labels:
+      - "com.omni-mind.service=swarm"
+      - "com.omni-mind.node=2"
+
+  # ─── P2P Swarm Node 3 (peers with swarm-1 + swarm-2)
+  swarm-3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: omni-swarm-3
+    ports:
+      - "18103:18103"
+    command: ["swarm", "18103", "swarm-1:18101,swarm-2:18102"]
+    restart: unless-stopped
+    depends_on:
+      - swarm-1
+      - swarm-2
+    networks:
+      - omni-net
+    labels:
+      - "com.omni-mind.service=swarm"
+      - "com.omni-mind.node=3"
+
+networks:
+  omni-net:
+    driver: bridge
+    labels:
+      - "com.omni-mind.network=main"

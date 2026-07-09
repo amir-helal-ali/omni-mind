@@ -1,0 +1,144 @@
+# Omni-Mind CI/CD Pipeline
+#
+# This workflow runs on every push and PR to main/develop branches.
+# It builds, tests, benchmarks, and packages the project.
+
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ["v*"]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  ZIG_VERSION: "0.13.0"
+  RUST_VERSION: "stable"
+
+jobs:
+  # ─── Zig Core: Build + Test ─────────────────────────
+  zig-test:
+    name: Zig Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        run: |
+          curl -sL "https://ziglang.org/download/${{ env.ZIG_VERSION }}/zig-linux-x86_64-${{ env.ZIG_VERSION }}.tar.xz" | tar -xJ -C /usr/local
+          echo "/usr/local/zig-linux-x86_64-${{ env.ZIG_VERSION }}" >> $GITHUB_PATH
+
+      - name: Verify Zig
+        run: zig version
+
+      - name: Build
+        run: zig build
+
+      - name: Test
+        run: zig build test
+
+      - name: Build benchmark
+        run: zig build bench
+
+      - name: Run benchmark
+        run: ./zig-out/bin/omni-bench
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            zig-out/bin/omni-bench
+
+  # ─── Rust Swarm: Build + Test ───────────────────────
+  rust-test:
+    name: Rust Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          # Build Zig core first (Rust swarm links against it)
+          curl -sL "https://ziglang.org/download/${{ env.ZIG_VERSION }}/zig-linux-x86_64-${{ env.ZIG_VERSION }}.tar.xz" | tar -xJ -C /usr/local
+          echo "/usr/local/zig-linux-x86_64-${{ env.ZIG_VERSION }}" >> $GITHUB_PATH
+          zig build
+
+      - name: Build
+        run: cd swarm && cargo build --release
+
+      - name: Test
+        run: cd swarm && cargo test
+
+      - name: Lint (clippy)
+        run: cd swarm && cargo clippy --release -- -D warnings
+
+      - name: Format check
+        run: cd swarm && cargo fmt -- --check
+
+  # ─── Docker Build ───────────────────────────────────
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [zig-test, rust-test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          tags: omni-mind:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Release ────────────────────────────────────────
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [zig-test, rust-test, docker-build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Zig
+        run: |
+          curl -sL "https://ziglang.org/download/${{ env.ZIG_VERSION }}/zig-linux-x86_64-${{ env.ZIG_VERSION }}.tar.xz" | tar -xJ -C /usr/local
+          echo "/usr/local/zig-linux-x86_64-${{ env.ZIG_VERSION }}" >> $GITHUB_PATH
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release
+        run: |
+          zig build -Doptimize=ReleaseFast
+          cd swarm && cargo build --release
+
+      - name: Create tarball
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          mkdir -p dist
+          cp zig-out/bin/omni-mind dist/
+          cp zig-out/bin/omni-bench dist/
+          cp swarm/target/release/omni-swarm-node dist/
+          cp swarm/target/release/omni-web dist/
+          cp swarm/target/release/omni-crawler dist/
+          tar -czf omni-mind-${VERSION}-linux-x86_64.tar.gz -C dist .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: omni-mind-*.tar.gz
+          draft: false
+          prerelease: false
+          generate_release_notes: true

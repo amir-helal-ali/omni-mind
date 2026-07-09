@@ -1,0 +1,78 @@
+# Omni-Mind Configuration File
+#
+# Copy to omni.toml and customize. All values are optional
+# and have sensible defaults.
+
+[core]
+# Memory budget in bytes (default: 2147483648 = 2GB)
+# In debug mode, this is capped at 16MB for faster testing.
+memory_budget = 2147483648
+
+# Number of axiom slots to pre-allocate (default: 10000)
+axiom_capacity = 10000
+
+# Number of graph nodes to pre-allocate (default: 50000)
+node_capacity = 50000
+
+# Number of graph edges to pre-allocate (default: 500000)
+edge_capacity = 500000
+
+# Living memory capacity (number of delta events, default: 1000000)
+memory_capacity = 1000000
+
+[web]
+# Port for the web server (default: 8080)
+port = 8080
+
+# Bind address (default: 0.0.0.0)
+host = "0.0.0.0"
+
+# Max request body size in bytes (default: 65536)
+max_body_size = 65536
+
+[tcp]
+# Port for the TCP server (default: 19090)
+port = 19090
+
+# Max concurrent clients (default: 100)
+max_clients = 100
+
+# Read timeout in seconds (default: 30)
+read_timeout = 30
+
+[swarm]
+# Port for the P2P swarm node (default: 18101)
+port = 18101
+
+# Known peers to bootstrap from (comma-separated)
+# peers = ["node1.example.com:18101", "node2.example.com:18101"]
+
+# Gossip TTL (default: 8)
+gossip_ttl = 8
+
+# Minimum stake to broadcast with high TTL (default: 10)
+min_stake = 10
+
+[crawler]
+# Enable live HTTP API calls (default: true)
+# Set to false for offline mode (uses heuristics instead)
+enabled = true
+
+# Request timeout in seconds (default: 15)
+timeout = 15
+
+# Max candidates per foraging cycle (default: 5)
+max_per_cycle = 5
+
+# Academic APIs to probe (default: all three)
+[crawler.apis]
+crossref = true
+arxiv = true
+semantic_scholar = true
+
+[logging]
+# Log level: trace, debug, info, warn, error (default: info)
+level = "info"
+
+# Log to file (empty = stdout only)
+# file = "/var/log/omni-mind.log"

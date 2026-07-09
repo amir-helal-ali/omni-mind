@@ -1,0 +1,36 @@
+# ─── Build artifacts ─────────────────────────────────
+zig-out/
+.zig-cache/
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+
+# ─── Rust ────────────────────────────────────────────
+swarm/target/
+swarm/Cargo.lock
+
+# ─── Runtime data ────────────────────────────────────
+omni_memory.bin
+*.log
+*.pid
+
+# ─── IDE / Editor ────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Docker ──────────────────────────────────────────
+docker-data/
+
+# ─── Coverage ────────────────────────────────────────
+*.gcov
+*.lcov
+coverage/
+tarpaulin-report.html
