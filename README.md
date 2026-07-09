@@ -43,7 +43,7 @@ Omni-Mind is a **procedural-symbolic AI** that abandons traditional deep learnin
 ### 1. Build the Docker image (5-15 minutes)
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/omni-mind.git
+git clone https://github.com/amir-helal-ali/omni-mind.git
 cd omni-mind
 docker build -t omni-mind .
 ```

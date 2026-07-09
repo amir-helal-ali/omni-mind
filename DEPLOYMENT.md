@@ -34,7 +34,7 @@ Complete step-by-step guide to:
 
 4. Copy your repository URL — it will look like:
    ```
-   https://github.com/YOUR_USERNAME/omni-mind.git
+   https://github.com/amir-helal-ali/omni-mind.git
    ```
 
 ---
@@ -53,7 +53,7 @@ git config user.name "Your Name"
 git config user.email "your.email@example.com"
 
 # 3. Add your GitHub repository as remote
-git remote add origin https://github.com/YOUR_USERNAME/omni-mind.git
+git remote add origin https://github.com/amir-helal-ali/omni-mind.git
 
 # 4. Rename branch to 'main' (GitHub default)
 git branch -M main
@@ -167,7 +167,7 @@ omni-mind/
 
 ```bash
 # Clone your repository
-git clone https://github.com/YOUR_USERNAME/omni-mind.git
+git clone https://github.com/amir-helal-ali/omni-mind.git
 cd omni-mind
 
 # Build the Docker image (5-15 minutes, downloads Zig + Rust)
@@ -180,7 +180,7 @@ bash scripts/docker-run.sh build
 ### Option B: Use docker-compose
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/omni-mind.git
+git clone https://github.com/amir-helal-ali/omni-mind.git
 cd omni-mind
 
 # Build and start all services
