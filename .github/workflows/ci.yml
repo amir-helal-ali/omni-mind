@@ -41,6 +41,12 @@ jobs:
       - name: Build benchmark
         run: zig build bench
 
+      - name: Build native verifier
+        run: zig build verify
+
+      - name: ★ Native Zig verification (1000 questions)
+        run: ./zig-out/bin/omni-verify
+
       - name: Run benchmark
         run: ./zig-out/bin/omni-bench
 
@@ -51,6 +57,7 @@ jobs:
           name: benchmark-results
           path: |
             zig-out/bin/omni-bench
+            zig-out/bin/omni-verify
 
   # ─── Rust Swarm: Build + Test ───────────────────────
   rust-test:

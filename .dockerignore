@@ -1,0 +1,64 @@
+# .dockerignore — Keep Docker build context small
+# Files/directories listed here are NOT sent to the Docker builder
+
+# Build artifacts
+zig-out/
+.zig-cache/
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+
+# Rust
+swarm/target/
+swarm/Cargo.lock
+
+# Runtime data
+omni_memory.bin
+*.log
+*.pid
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-data/
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# CI
+.github/
+
+# Documentation (already in image, no need to re-copy)
+*.md
+LICENSE
+CHANGELOG.md
+CONTRIBUTING.md
+
+# Project status / deployment (not needed in image)
+PROJECT_STATUS.md
+DEPLOYMENT.md
+DOCKER.md
+
+# Examples
+omni.toml.example
+
+# Tests (not needed in runtime image, but kept for builder)
+# tests/
+
+# OS
+.DS_Store
+Thumbs.db
