@@ -67,7 +67,7 @@ WORKDIR /build
 COPY . .
 
 # ─── Build Zig core (ReleaseFast) ──────────────────────────────────
-RUN zig build -Doptimize=ReleaseFast
+RUN zig build
 
 # ─── Build Rust swarm (all binaries) ───────────────────────────────
 RUN cd swarm && cargo build --release

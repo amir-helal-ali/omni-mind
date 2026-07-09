@@ -8,15 +8,13 @@
 #   swarm-3  — P2P node 3, peers with swarm-1 + swarm-2 (port 18103)
 #
 # Usage:
-#   docker-compose up -d                    Start all services
-#   docker-compose up web                   Start only web
-#   docker-compose run --rm web verify      Run native Zig verification
-#   docker-compose run --rm web bench       Run 1000-question benchmark
-#   docker-compose run --rm web repl        Interactive REPL
-#   docker-compose logs -f web              Follow web logs
-#   docker-compose down                     Stop all services
-
-version: "3.9"
+#   docker compose up -d                    Start all services
+#   docker compose up web                   Start only web
+#   docker compose run --rm web verify      Run native Zig verification
+#   docker compose run --rm web bench       Run 1000-question benchmark
+#   docker compose run --rm web repl        Interactive REPL
+#   docker compose logs -f web              Follow web logs
+#   docker compose down                     Stop all services
 
 services:
   # ─── Web Server (HTTP API + UI) ─────────────────────

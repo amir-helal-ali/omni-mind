@@ -56,7 +56,7 @@ pub fn build(b: *std.Build) void {
         .name = "omni-bench",
         .root_source_file = b.path("src/bench.zig"),
         .target = target,
-        .optimize = .Debug,
+        .optimize = optimize,
     });
     bench.linkLibC();
     b.installArtifact(bench);
@@ -72,7 +72,7 @@ pub fn build(b: *std.Build) void {
         .name = "omni-verify",
         .root_source_file = b.path("src/verify.zig"),
         .target = target,
-        .optimize = .Debug,
+        .optimize = optimize,
     });
     verify.linkLibC();
     b.installArtifact(verify);
