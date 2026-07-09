@@ -9,10 +9,12 @@ pub mod crawler;
 pub mod ffi;
 pub mod network;
 pub mod web;
+pub mod internet;
 
 pub use protocol::{GossipMessage, HandleResult, SwarmNode};
 pub use crawler::{LogicalCrawler, KnowledgeGap, AxiomCandidate, CrawlerStats};
 pub use network::{NetworkedNode, NetworkStats};
+pub use internet::{InternetFact, search_wikipedia, search_wikipedia_multi, fact_to_axiom_text};
 
 /// Initialize the swarm. Must be called once at startup.
 pub fn init() -> Result<(), SwarmError> {

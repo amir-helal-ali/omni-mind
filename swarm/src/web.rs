@@ -134,9 +134,18 @@ fn handle_request(mut stream: TcpStream) {
     let request = String::from_utf8_lossy(&total);
     let (method, path, body) = parse_request(&request);
 
-    log::debug!("{} {} (body {} bytes: {})", method, path, body.len(), &body[..body.len().min(100)]);
+    // Extract query string from path (e.g., "/api/search?q=energy" → "q=energy")
+    let query_string = if let Some(pos) = path.find('?') {
+        path[pos + 1..].to_string()
+    } else {
+        String::new()
+    };
+    // Strip query string from path for routing.
+    let path_clean = if let Some(pos) = path.find('?') { &path[..pos] } else { &path };
 
-    let (status, content_type, response_body) = match (method.as_str(), path.as_str()) {
+    log::debug!("{} {} (body {} bytes: {})", method, path_clean, body.len(), &body[..body.len().min(100)]);
+
+    let (status, content_type, response_body) = match (method.as_str(), path_clean) {
         ("GET", "/") => serve_html(),
         ("GET", "/index.html") => serve_html(),
         ("POST", "/api/query") => handle_query(&body),
@@ -144,6 +153,8 @@ fn handle_request(mut stream: TcpStream) {
         ("GET", "/api/health") => handle_health(),
         ("GET", "/api/metrics") => handle_metrics(),
         ("POST", "/api/ingest") => handle_ingest(&body),
+        ("POST", "/api/learn") => handle_learn(&body),
+        ("GET", "/api/search") => handle_search(&query_string),
         ("OPTIONS", _) => ("200 OK", "text/plain", String::new()),
         _ => ("404 Not Found", "application/json", r#"{"error":"not found"}"#.to_string()),
     };
@@ -302,6 +313,109 @@ fn extract_ingest(body: &str) -> (u8, String) {
         return (domain, text);
     }
     (0, body.trim().to_string())
+}
+
+/// Handle /api/learn — learn about a topic from Wikipedia.
+/// Body: {"topic":"energy","lang":"en"} or {"topic":"الطاقة","lang":"ar"}
+/// Fetches from Wikipedia, extracts summary, ingests as axiom.
+fn handle_learn(body: &str) -> (&'static str, &'static str, String) {
+    let topic = match extract_json_string(body, "topic") {
+        Some(t) if !t.is_empty() => t,
+        _ => return ("400 Bad Request", "application/json",
+            r#"{"error":"missing topic"}"#.to_string()),
+    };
+    let lang = extract_json_string(body, "lang").unwrap_or_else(|| "en".to_string());
+
+    log::info!("Learning request: topic='{}', lang='{}'", topic, lang);
+
+    // Search Wikipedia for the topic.
+    let fact = match crate::internet::search_wikipedia(&topic, &lang) {
+        Some(f) => f,
+        None => return ("404 Not Found", "application/json",
+            format!(r#"{{"error":"no Wikipedia article found for '{}'"}}"#, escape_json(&topic))),
+    };
+
+    // Convert to axiom text.
+    let axiom_text = crate::internet::fact_to_axiom_text(&fact);
+
+    // Determine domain from the topic (simple heuristic).
+    let domain = guess_domain(&topic);
+
+    // Ingest into the knowledge base.
+    match ffi::safe_inject_axiom(domain, &axiom_text, fact.confidence) {
+        Ok(()) => {
+            log::info!("Learned from internet: '{}' → domain {}", axiom_text, domain);
+            ("200 OK", "application/json",
+                format!(r#"{{"status":"learned","topic":"{}","axiom":"{}","source":"{}","domain":{}}}"#,
+                    escape_json(&topic),
+                    escape_json(&axiom_text),
+                    escape_json(&fact.source_url),
+                    domain))
+        }
+        Err(e) => ("500 Internal Server Error", "application/json",
+            format!(r#"{{"error":"ingest failed: code {}}}"#, e)),
+    }
+}
+
+/// Handle /api/search?q=topic — search Wikipedia without ingesting.
+/// Returns the summary as JSON.
+fn handle_search(query_string: &str) -> (&'static str, &'static str, String) {
+    // Parse q= from query string.
+    let topic = query_string
+        .strip_prefix("q=")
+        .unwrap_or("")
+        .split('&')
+        .next()
+        .unwrap_or("")
+        .to_string();
+
+    if topic.is_empty() {
+        return ("400 Bad Request", "application/json",
+            r#"{"error":"missing q parameter"}"#.to_string());
+    }
+
+    let fact = match crate::internet::search_wikipedia(&topic, "en") {
+        Some(f) => f,
+        None => return ("404 Not Found", "application/json",
+            format!(r#"{{"error":"not found"}}"#)),
+    };
+
+    ("200 OK", "application/json",
+        format!(r#"{{"topic":"{}","summary":"{}","source":"{}"}}"#,
+            escape_json(&fact.topic),
+            escape_json(&fact.summary),
+            escape_json(&fact.source_url)))
+}
+
+/// Simple heuristic to guess the domain (0-15) from a topic.
+fn guess_domain(topic: &str) -> u8 {
+    let t = topic.to_lowercase();
+    if t.contains("energy") || t.contains("quantum") || t.contains("force")
+        || t.contains("طاقة") || t.contains("كم") || t.contains("قوة") { return 0; }
+    if t.contains("atom") || t.contains("molecule") || t.contains("chemical")
+        || t.contains("ذرة") || t.contains("جزيء") || t.contains("كيمياء") { return 1; }
+    if t.contains("cell") || t.contains("dna") || t.contains("evolution")
+        || t.contains("خلية") || t.contains("حمض") || t.contains("تطور") { return 2; }
+    if t.contains("math") || t.contains("equation") || t.contains("algebra")
+        || t.contains("رياض") || t.contains("معادلة") || t.contains("جبر") { return 3; }
+    if t.contains("logic") || t.contains("proof") || t.contains("منطق") { return 4; }
+    if t.contains("computer") || t.contains("algorithm") || t.contains("software")
+        || t.contains("حاسوب") || t.contains("خوارزم") { return 5; }
+    if t.contains("economy") || t.contains("market") || t.contains("trade")
+        || t.contains("اقتصاد") || t.contains("سوق") || t.contains("تجارة") { return 6; }
+    if t.contains("philosoph") || t.contains("ethic") || t.contains("فلسف") { return 7; }
+    if t.contains("psycholog") || t.contains("mind") || t.contains("نفس") { return 8; }
+    if t.contains("history") || t.contains("war") || t.contains("تاريخ") || t.contains("حرب") { return 9; }
+    if t.contains("language") || t.contains("linguist") || t.contains("لغة") || t.contains("لسان") { return 10; }
+    if t.contains("star") || t.contains("planet") || t.contains("galaxy")
+        || t.contains("نجم") || t.contains("كوكب") || t.contains("مجرة") { return 11; }
+    if t.contains("earth") || t.contains("rock") || t.contains("earthquake")
+        || t.contains("أرض") || t.contains("صخر") || t.contains("زلزال") { return 12; }
+    if t.contains("medicine") || t.contains("disease") || t.contains("health")
+        || t.contains("طب") || t.contains("مرض") || t.contains("صحة") { return 13; }
+    if t.contains("engineer") || t.contains("circuit") || t.contains("هندس") { return 14; }
+    if t.contains("politic") || t.contains("government") || t.contains("سياس") || t.contains("حكوم") { return 15; }
+    0 // default to physics
 }
 
 fn extract_json_string(json: &str, key: &str) -> Option<String> {
@@ -542,6 +656,7 @@ footer {
   <div class="query-form">
     <input type="text" id="query" placeholder="اكتب سؤالك هنا..." autofocus>
     <button onclick="askQuery()">اسأل</button>
+    <button onclick="learnFromInternet()" style="background:var(--cyan);color:var(--void);font-weight:700;">🌐 تعلّم من الإنترنت</button>
   </div>
   <div class="loading" id="loading">جاري المعالجة عبر 7 طبقات...</div>
   <div class="answer-box empty" id="answer">ستظهر الإجابة هنا</div>
@@ -631,6 +746,41 @@ async function ingestAxiom() {
   } catch(e) {
     alert('خطأ: ' + e.message);
   }
+  loadStats();
+}
+
+async function learnFromInternet() {
+  const q = document.getElementById('query').value;
+  if (!q) {
+    alert('اكتب موضوعاً في خانة البحث أولاً');
+    return;
+  }
+  document.getElementById('loading').classList.add('active');
+  document.getElementById('answer').classList.add('empty');
+  document.getElementById('answer').textContent = 'جاري التعلم من الإنترنت...';
+  try {
+    const lang = /[\u0600-\u06FF]/.test(q) ? 'ar' : 'en';
+    const res = await fetch('/api/learn', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({topic: q, lang: lang})
+    });
+    const data = await res.json();
+    document.getElementById('answer').classList.remove('empty');
+    if (data.status === 'learned') {
+      document.getElementById('answer').textContent =
+        '✓ تم التعلم من الإنترنت!\n\n' +
+        'الموضوع: ' + data.topic + '\n' +
+        'البديهية الجديدة: ' + data.axiom + '\n' +
+        'المصدر: ' + data.source + '\n' +
+        'المجال: ' + data.domain;
+    } else {
+      document.getElementById('answer').textContent = 'فشل التعلم: ' + (data.error || 'غير معروف');
+    }
+  } catch(e) {
+    document.getElementById('answer').textContent = 'خطأ: ' + e.message;
+  }
+  document.getElementById('loading').classList.remove('active');
   loadStats();
 }
 
