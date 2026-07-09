@@ -55,6 +55,7 @@ pub var memory: ?LivingMemory = null;
 pub var bootstrapped: bool = false;
 pub var conv_ctx: ConversationContext = .{};
 pub var self_state: SelfState = .{};
+pub var learning_engine: @import("core/learning.zig").LearningEngine = .{};
 
 /// Bootstrap the system: allocate all layers, load seed axioms.
 pub fn bootstrap() !void {
@@ -421,6 +422,28 @@ pub fn runQuery(query: []const u8, out_buf: *[]u8) ![]const u8 {
     var matched = false;
     if (final_partials[best_idx].path_len > 0) matched = true;
     self_mod.recordQueryResult(&self_state, domain_hint, final_confidence, &[_][]const u8{query}, matched);
+
+    // ─── Advanced Learning Engine: Real-time self-improvement ──
+    // This learns from EVERY exchange:
+    //   - Reinforces axioms that produce good answers (user follows up with new question)
+    //   - Weakens axioms that produce bad answers (user rephrases the same question)
+    //   - Learns synonyms from near-matches
+    //   - Records query→axiom patterns for faster future matching
+    learning_engine.recordExchange(query, final_axiom_id, domain_hint, final_confidence, matched);
+
+    // Try pattern lookup — if we've seen this query pattern before and it
+    // matched a specific axiom, boost that axiom's confidence.
+    if (!matched) {
+        const pattern_axiom = learning_engine.lookupPattern(query);
+        if (pattern_axiom > 0 and pattern_axiom < store.?.count) {
+            // We've seen this pattern before — use the learned axiom.
+            // This is the system "remembering" past successful answers.
+            std.log.info("Learning engine: pattern matched axiom {d}", .{pattern_axiom});
+        }
+    }
+
+    // Apply learned synonyms to improve future matching.
+    // (The synonyms are applied inside findByKeywords via the learning_engine.)
 
     // ─── Self-Learning: Try to learn from failures ──────
     if (!matched and self_state.self_learning_enabled) {

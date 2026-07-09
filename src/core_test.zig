@@ -10,6 +10,7 @@ test "core: node sizes" {
     _ = @import("core/axiom_translations.zig");
     _ = @import("core/conversation.zig");
     _ = @import("core/self.zig");
+    _ = @import("core/learning.zig");
 }
 
 test "l1: axiom and collapse" {

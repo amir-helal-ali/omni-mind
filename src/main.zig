@@ -171,11 +171,17 @@ fn handleCommand(state: *ReplState, input: []const u8, stdout: anytype) !void {
             \\  /user NAME      — switch to user (creates if new)
             \\  /history        — show recent memory for current user
             \\  /stats          — show system stats
+            \\  /learning       — show learning engine status (self-improvement)
             \\  /ingest D TEXT  — add axiom (D = domain 0-9)
             \\  /list           — list all axioms (English)
             \\  /list ar        — list all axioms (Arabic)
             \\  /save           — save memory to disk
             \\  /load           — reload memory from disk
+            \\  /self           — self-awareness report
+            \\  /self iq        — IQ report
+            \\  /self learn     — trigger self-learning
+            \\  /self reflect   — self-reflection tests
+            \\  /self evolve    — trigger self-evolution
             \\  /help           — show this help
             \\  /exit           — quit
             \\
@@ -198,7 +204,13 @@ fn handleCommand(state: *ReplState, input: []const u8, stdout: anytype) !void {
         try stdout.print("  Nodes: {d}\n", .{stats.node_count});
         try stdout.print("  Edges: {d}\n", .{stats.edge_count});
         try stdout.print("  Axioms: {d}\n", .{core.store.?.count});
-        try stdout.print("  Total events: {d}\n\n", .{core.memory.?.totalEvents()});
+        try stdout.print("  Total events: {d}\n", .{core.memory.?.totalEvents()});
+        const lst = core.learning_engine.stats();
+        try stdout.print("\n  Learning Engine:\n", .{});
+        try stdout.print("    Synonyms learned: {d}\n", .{lst.synonyms_learned});
+        try stdout.print("    Patterns learned: {d}\n", .{lst.patterns_learned});
+        try stdout.print("    Reinforcements:   {d}\n", .{lst.reinforcements});
+        try stdout.print("    Patterns matched: {d}\n\n", .{lst.patterns_matched});
         return;
     }
 
@@ -356,6 +368,28 @@ fn handleCommand(state: *ReplState, input: []const u8, stdout: anytype) !void {
         var iq_buf: [2048]u8 = undefined;
         const n = self_mod.formatIQReport(report, detected, &iq_buf);
         try stdout.print("\n{s}\n", .{iq_buf[0..n]});
+        return;
+    }
+
+    if (std.mem.eql(u8, input, "/learning") or std.mem.eql(u8, input, "/self learning")) {
+        const stats = core.learning_engine.stats();
+        try stdout.print("\n" ++
+            "╔══════════════════════════════════════════════════════════════╗\n" ++
+            "║          Omni-Mind Learning Engine — Live Status             ║\n" ++
+            "╚══════════════════════════════════════════════════════════════╝\n\n", .{});
+        try stdout.print("  Synonyms learned:     {d:>6}\n", .{stats.synonyms_learned});
+        try stdout.print("  Patterns learned:     {d:>6}\n", .{stats.patterns_learned});
+        try stdout.print("  Confidence adjustments:{d:>5}\n", .{stats.adjustments_count});
+        try stdout.print("  Synonyms applied:     {d:>6}\n", .{stats.synonyms_applied});
+        try stdout.print("  Patterns matched:     {d:>6}\n", .{stats.patterns_matched});
+        try stdout.print("  Total reinforcements: {d:>6}\n", .{stats.reinforcements});
+        try stdout.print("\n  How it works:\n", .{});
+        try stdout.print("    • Every query teaches the system\n", .{});
+        try stdout.print("    • Good answers → axiom reinforced (+5% confidence)\n", .{});
+        try stdout.print("    • Bad answers → axiom weakened (-10% confidence)\n", .{});
+        try stdout.print("    • Near-matches → synonyms learned for future use\n", .{});
+        try stdout.print("    • Successful patterns → faster future matching\n", .{});
+        try stdout.print("\n  The system gets smarter with every interaction.\n\n", .{});
         return;
     }
 
