@@ -862,6 +862,12 @@ fn writeStr(buf: []u8, pos: *usize, s: []const u8) void {
     }
 }
 
+/// Helper: write a formatted string into a buffer, returning bytes written.
+fn writeFmt(buf: []u8, comptime fmt: []const u8, args: anytype) usize {
+    const result = std.fmt.bufPrint(buf, fmt, args) catch return 0;
+    return result.len;
+}
+
 /// Get the Arabic name of a domain.
 fn domainName(d: u8) []const u8 {
     return switch (@as(Domain, @enumFromInt(d))) {
