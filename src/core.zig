@@ -296,7 +296,7 @@ pub fn runQuery(query: []const u8, out_buf: *[]u8) ![]const u8 {
 
     // ─── Handle greetings & social messages directly ──────
     // These don't need the knowledge engine — respond naturally.
-    if (qtype == .greeting or qtype == .social) {
+    if (qtype == .greeting or qtype == .social or qtype == .personal or qtype == .opinion or qtype == .help) {
         const out = out_buf.*;
         var pos: usize = 0;
         const domain_name = lang.domainName(0, detected_lang);

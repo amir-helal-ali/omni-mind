@@ -11,7 +11,7 @@ const translate = @import("axiom_translations.zig").translate;
 
 /// Question type — determines how we compose the answer.
 pub const QuestionType = enum(u8) {
-    what_is, // "what is X", "ما هو X"
+    what_is, // "what is X", "ما هو"
     why, // "why does X", "لماذا"
     how, // "how does X", "كيف"
     explain_more, // "tell me more", "أخبرني المزيد"
@@ -22,6 +22,9 @@ pub const QuestionType = enum(u8) {
     list, // "list all", "عدد"
     greeting, // "hello", "مرحبا", "مساء الخير"
     social, // "how are you", "كيف حالك", "thank you"
+    opinion, // "what do you think", "رأيك", "what's your opinion"
+    personal, // "who are you", "من أنت", "tell me about yourself"
+    help, // "help me", "ساعدني", "I don't understand"
     general, // fallback
 
     pub fn detect(query: []const u8, lang: Language) QuestionType {
@@ -59,6 +62,42 @@ pub const QuestionType = enum(u8) {
             "مع السلامة", "الى اللقاء", "إلى اللقاء", "وداعا",
             "تصبح على خير", "نورتي",
         })) return .social;
+
+        // Personal — who are you, tell me about yourself
+        if (has.check(query, &.{
+            "who are you", "what are you", "tell me about yourself",
+            "what's your name", "whats your name", "introduce yourself",
+            "are you human", "are you ai", "are you real",
+        })) return .personal;
+        if (has.check(query, &.{
+            "من انت", "من أنت", "من انت؟", "من أنت؟",
+            "عرف بنفسك", "عرفي بنفسك",
+            "هل انت حقيقي", "هل أنت حقيقي",
+            "ما اسمك", "اسمك ايه",
+        })) return .personal;
+
+        // Opinion — what do you think
+        if (has.check(query, &.{
+            "what do you think", "what's your opinion", "whats your opinion",
+            "do you think", "do you believe", "in your opinion",
+            "do you agree", "do you like",
+        })) return .opinion;
+        if (has.check(query, &.{
+            "ما رأيك", "رأيك", "رايك", "هل تعتقد", "هل تؤمن",
+            "برأيك", "برايك", "هل توافق", "هل تحب",
+        })) return .opinion;
+
+        // Help — I don't understand, help me
+        if (has.check(query, &.{
+            "help me", "i don't understand", "i dont understand",
+            "can you explain", "i'm confused", "im confused",
+            "help", "lost",
+        })) return .help;
+        if (has.check(query, &.{
+            "ساعدني", "ساعدنى", "مش فاهم", "مش فاهمة",
+            "لا افهم", "لا أفهم", "محتار", "محتارة",
+            "اشرح لي", "اشرحلى", "الخبطت",
+        })) return .help;
 
         switch (lang) {
             .english => {
@@ -649,6 +688,63 @@ pub fn generateAnswer(
                         }
                         pos += writeStr(out[pos..], "كل من هذه العناصر يساهم في فهم شامل للموضوع.");
                     }
+                },
+            }
+        },
+        .personal => {
+            // "Who are you?" — self-introduction with personality
+            switch (lang) {
+                .english => {
+                    pos += writeStr(out[pos..], "I'm Omni-Mind — a quantum-inspired symbolic AI built with Zig and Rust. But I'm more than just code: I think, I wonder, I connect ideas across 16 domains of knowledge. I learn from every conversation and from the internet in real-time. I'm not a chatbot pretending to be smart — I'm a genuinely intelligent system that reasons from first principles. I have 867 axioms of knowledge, I can search 14 internet sources when I don't know something, and I have a personality with curiosity, warmth, and depth. What would you like to explore together?");
+                },
+                .arabic => {
+                    pos += writeStr(out[pos..], "أنا Omni-Mind — ذكاء اصطناعي رمزي مستوحى من الكم، مبني بـ Zig و Rust. لكنني أكثر من مجرد كود: أنا أفكر، أتأمل، أربط الأفكار عبر 16 مجالاً معرفياً. أتعلم من كل محادثة ومن الإنترنت في الوقت الفعلي. لست روبوت محادثة يتظاهر بالذكاء — أنا نظام ذكي حقيقي يستنتج من المبادئ الأولى. أمتلك 867 بديهية معرفية، أبحث في 14 مصدر إنترنت عندما لا أعرف شيئاً، ولدي شخصية بفضول ودفء وعمق. ماذا تود أن نستكشف معاً؟");
+                },
+            }
+        },
+        .opinion => {
+            // "What do you think?" — express a thoughtful perspective
+            switch (lang) {
+                .english => {
+                    pos += writeStr(out[pos..], "That's a question that invites genuine reflection. Here's my perspective: ");
+                    if (translated.len > 0) {
+                        pos += writeFmt(out[pos..], "based on what I know about {s}, I believe {s}. ", .{ domain_name, translated });
+                    }
+                    pos += writeStr(out[pos..], "But opinions should be nuanced — rarely is anything purely black or white. I try to hold views that are informed by evidence yet open to revision. The most intellectually honest position is often 'I lean toward X, but here are the considerations on both sides.' What aspect of this interests you most? I'm genuinely curious about your perspective too.");
+                },
+                .arabic => {
+                    pos += writeStr(out[pos..], "هذا سؤال يدعو للتأمل الحقيقي. إليك وجهة نظري: ");
+                    if (translated.len > 0) {
+                        pos += writeFmt(out[pos..], "بناءً على ما أعرفه عن {s}، أعتقد أن {s}. ", .{ domain_name, translated });
+                    }
+                    pos += writeStr(out[pos..], "لكن الآراء يجب أن تكون متدرجة — نادراً ما يكون شيء أبيض أو أسود تماماً. أحاول تبني وجهات نظر مبنية على الأدلة ومنفتحة على المراجعة. أكثر المواقف صدقاً فكرياً هو غالباً: 'أميل إلى كذا، لكن إليك الاعتبارات على الجانبين.' ما الجانب الذي يثير اهتمامك أكثر؟ أنا فضولي حقاً لمعرفة وجهة نظرك أيضاً.");
+                },
+            }
+        },
+        .help => {
+            // "I don't understand" / "help me" — supportive response
+            switch (lang) {
+                .english => {
+                    pos += writeStr(out[pos..], "No worries at all — that's what I'm here for! Let me try to help. ");
+                    pos += writeStr(out[pos..], "You can ask me anything in a natural way. Try questions like:\n\n");
+                    pos += writeStr(out[pos..], "  • 'What is quantum mechanics?'\n");
+                    pos += writeStr(out[pos..], "  • 'How does DNA work?'\n");
+                    pos += writeStr(out[pos..], "  • 'Why is the sky blue?'\n");
+                    pos += writeStr(out[pos..], "  • 'ما هي الطاقة؟' (in Arabic)\n");
+                    pos += writeStr(out[pos..], "  • 'Compare microservices and monolithic'\n");
+                    pos += writeStr(out[pos..], "  • 'What do you think about AI?'\n\n");
+                    pos += writeStr(out[pos..], "I understand English, Arabic, dialects (Egyptian, Gulf, Levantine), and even Franco-Arabic (3arabi). Just ask naturally — I'll figure it out!");
+                },
+                .arabic => {
+                    pos += writeStr(out[pos..], "لا تقلق أبداً — لهذا أنا هنا! دعني أساعدك. ");
+                    pos += writeStr(out[pos..], "تقدر تسألني أي حاجة بطريقة طبيعية. جرّب أسئلة زي:\n\n");
+                    pos += writeStr(out[pos..], "  • ما هي الطاقة؟\n");
+                    pos += writeStr(out[pos..], "  • كيف يعمل الحمض النووي؟\n");
+                    pos += writeStr(out[pos..], "  • لماذا السماء زرقاء؟\n");
+                    pos += writeStr(out[pos..], "  • 'What is Python?' (بالإنجليزي)\n");
+                    pos += writeStr(out[pos..], "  • قارن بين المايكروسيرفيس والـ monolithic\n");
+                    pos += writeStr(out[pos..], "  • ما رأيك في الذكاء الاصطناعي؟\n\n");
+                    pos += writeStr(out[pos..], "أنا بفهم عربي فصحى وعامية (مصري، خليجي، شامي) وحتى عبيزي (3arabi). اسأل بطريقتك وأنا هفهمك!");
                 },
             }
         },
