@@ -293,6 +293,26 @@ pub fn runQuery(query: []const u8, out_buf: *[]u8) ![]const u8 {
     // ─── Detect question type ─────────────────────────────
     const qtype = QuestionType.detect(normalized_query, detected_lang);
 
+    // ─── Handle greetings & social messages directly ──────
+    // These don't need the knowledge engine — respond naturally.
+    if (qtype == .greeting or qtype == .social) {
+        const out = out_buf.*;
+        var pos: usize = 0;
+        const domain_name = lang.domainName(0, detected_lang);
+        const gen_len = conv.generateAnswer(
+            normalized_query, // use the query as "axiom_text" for social detection
+            qtype,
+            domain_name,
+            1.0, // full confidence for social
+            detected_lang,
+            &[_][]const u8{},
+            out[pos..],
+        );
+        pos += gen_len;
+        out_buf.* = out[pos..];
+        return out[0..pos];
+    }
+
     // ─── Resolve anaphora (follow-up questions) ───────────
     // For "tell me more", find a DIFFERENT axiom in the same domain
     // that shares prerequisites with the previous answer.

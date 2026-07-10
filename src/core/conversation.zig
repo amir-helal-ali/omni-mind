@@ -20,10 +20,11 @@ pub const QuestionType = enum(u8) {
     example, // "give an example", "مثال"
     definition, // "define X", "عرّف"
     list, // "list all", "عدد"
+    greeting, // "hello", "مرحبا", "مساء الخير"
+    social, // "how are you", "كيف حالك", "thank you"
     general, // fallback
 
     pub fn detect(query: []const u8, lang: Language) QuestionType {
-        // English patterns
         const has = struct {
             fn check(text: []const u8, needles: []const []const u8) bool {
                 for (needles) |n| {
@@ -32,6 +33,32 @@ pub const QuestionType = enum(u8) {
                 return false;
             }
         };
+
+        // ─── Check social/greeting patterns FIRST (both languages) ───
+        // Greetings (Arabic + English)
+        if (has.check(query, &.{
+            "hello", "hi", "hey", "good morning", "good evening", "good afternoon",
+            "good night", "greetings", "howdy", "what's up", "whats up",
+        })) return .greeting;
+        if (has.check(query, &.{
+            "مرحبا", "مرحب", "السلام عليكم", "صباح الخير", "مساء الخير",
+            "مساء النور", "صباح النور", "اهلا", "أهلا", "اهلين", "هلا",
+            "هاي", "هلو",
+        })) return .greeting;
+
+        // Social — how are you, thanks, goodbye
+        if (has.check(query, &.{
+            "how are you", "how r u", "how do you do",
+            "thank you", "thanks", "thx", "appreciate",
+            "goodbye", "bye", "see you", "cya",
+            "nice to meet", "glad to",
+        })) return .social;
+        if (has.check(query, &.{
+            "كيف حالك", "كيفك", "كيف الحال", "شلونك", "عامل ايه",
+            "شكرا", "شكراً", "تسلم", "ممنون", "يعطيك العافية",
+            "مع السلامة", "الى اللقاء", "إلى اللقاء", "وداعا",
+            "تصبح على خير", "نورتي",
+        })) return .social;
 
         switch (lang) {
             .english => {
@@ -621,6 +648,44 @@ pub fn generateAnswer(
                             pos += writeStr(out[pos..], ". ");
                         }
                         pos += writeStr(out[pos..], "كل من هذه العناصر يساهم في فهم شامل للموضوع.");
+                    }
+                },
+            }
+        },
+        .greeting => {
+            // Warm, natural greetings — NOT knowledge answers
+            switch (lang) {
+                .english => {
+                    pos += writeStr(out[pos..], "Hello! I'm Omni-Mind, your AI knowledge companion. I'm here to help you explore any topic you're curious about. Feel free to ask me about science, history, philosophy, technology, or anything else that interests you. What would you like to discover today?");
+                },
+                .arabic => {
+                    pos += writeStr(out[pos..], "أهلاً وسهلاً بك! أنا Omni-Mind، رفيقك في رحلة المعرفة. أنا هنا لمساعدتك في استكشاف أي موضوع يثير فضولك. اسألني عن العلوم أو التاريخ أو الفلسفة أو التكنولوجيا أو أي شيء آخر يهمك. ماذا تود أن تكتشف اليوم؟");
+                },
+            }
+        },
+        .social => {
+            // Social responses — how are you, thanks, goodbye
+            switch (lang) {
+                .english => {
+                    if (std.mem.indexOf(u8, axiom_text, "thank") != null or std.mem.indexOf(u8, axiom_text, "Thank") != null) {
+                        pos += writeStr(out[pos..], "You're very welcome! I'm always happy to help. Is there anything else you'd like to explore together?");
+                    } else if (std.mem.indexOf(u8, axiom_text, "how are you") != null or std.mem.indexOf(u8, axiom_text, "How are") != null) {
+                        pos += writeStr(out[pos..], "I'm doing wonderfully, thank you for asking! I'm always learning and growing my knowledge. Every conversation makes me a bit wiser. How about you — what's on your mind today?");
+                    } else if (std.mem.indexOf(u8, axiom_text, "bye") != null or std.mem.indexOf(u8, axiom_text, "Bye") != null or std.mem.indexOf(u8, axiom_text, "goodbye") != null) {
+                        pos += writeStr(out[pos..], "It was a pleasure talking with you! Feel free to come back anytime you have questions. Until then, keep curious and keep learning!");
+                    } else {
+                        pos += writeStr(out[pos..], "That's kind of you! I'm here and ready to help with whatever you need. What would you like to talk about?");
+                    }
+                },
+                .arabic => {
+                    if (std.mem.indexOf(u8, axiom_text, "شكر") != null or std.mem.indexOf(u8, axiom_text, "تسلم") != null or std.mem.indexOf(u8, axiom_text, "ممنون") != null) {
+                        pos += writeStr(out[pos..], "العفو! سعيد جداً بمساعدتك. هل هناك شيء آخر تود أن نستكشفه معاً؟");
+                    } else if (std.mem.indexOf(u8, axiom_text, "كيف حالك") != null or std.mem.indexOf(u8, axiom_text, "كيفك") != null or std.mem.indexOf(u8, axiom_text, "شلونك") != null) {
+                        pos += writeStr(out[pos..], "أنا بخير والحمد لله، شكراً لسؤالك اللطيف! أنا دائماً في حالة تعلم ونمو. كل محادثة تجعلني أكثر حكمة. وأنت، ما الذي يشغل تفكيرك اليوم؟");
+                    } else if (std.mem.indexOf(u8, axiom_text, "سلامة") != null or std.mem.indexOf(u8, axiom_text, "وداع") != null or std.mem.indexOf(u8, axiom_text, "لقاء") != null) {
+                        pos += writeStr(out[pos..], "كان من دواعي سروري الحديث معك! لا تتردد في العودة متى شئت. حتى ذلك الحين، ابقَ فضولياً وواصل التعلم!");
+                    } else {
+                        pos += writeStr(out[pos..], "لطف منك! أنا هنا وجاهز لمساعدتك في أي شيء تحتاجه. عن ماذا تود أن نتحدث؟");
                     }
                 },
             }
