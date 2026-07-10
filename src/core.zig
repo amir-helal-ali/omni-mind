@@ -542,6 +542,9 @@ pub fn runQuery(query: []const u8, out_buf: *[]u8) ![]const u8 {
     consciousness.detectMood(normalized_query);
     consciousness.remember(normalized_query, normalized_query, domain_hint, final_confidence > 0.5);
 
+    // ─── Check if this relates to a previous conversation ───
+    const related_memory = consciousness.findRelatedMemory(normalized_query);
+
     // ─── Generate natural language answer ─────────────────
     const answer = generateNaturalAnswer(
         out_buf,
@@ -564,6 +567,19 @@ pub fn runQuery(query: []const u8, out_buf: *[]u8) ![]const u8 {
         const out = out_buf.*;
         var pos: usize = answer.len;
         const lang_id: u8 = if (detected_lang == .arabic) 0 else 1;
+
+        // If we found a related memory, mention the connection
+        if (related_memory) |mem| {
+            if (mem.topic_len > 0) {
+                const topic_text = mem.topic[0..mem.topic_len];
+                if (lang_id == 0) {
+                    pos += writeFmt(out[pos..], "\n\n🔄 بالمناسبة، هذا يرتبط بما ناقشناه سابقاً عن {s}. من المثير كيف تتشابك الأفكار وتتغذى من بعضها البعض.", .{topic_text});
+                } else {
+                    pos += writeFmt(out[pos..], "\n\n🔄 By the way, this connects to what we discussed earlier about {s}. It's fascinating how ideas intertwine and feed off each other.", .{topic_text});
+                }
+            }
+        }
+
         const insight_len = consciousness.generateProactiveInsight(normalized_query, lang_id, out[pos..]);
         pos += insight_len;
         out_buf.* = out[pos..];

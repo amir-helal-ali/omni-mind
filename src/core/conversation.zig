@@ -653,13 +653,24 @@ pub fn generateAnswer(
             }
         },
         .greeting => {
-            // Warm, natural greetings — NOT knowledge answers
+            // Warm, natural greetings — vary based on interaction count
+            const variation = @as(u8, @truncate(@as(u64, @intCast(std.time.timestamp())) % 4));
             switch (lang) {
                 .english => {
-                    pos += writeStr(out[pos..], "Hello! I'm Omni-Mind, your AI knowledge companion. I'm here to help you explore any topic you're curious about. Feel free to ask me about science, history, philosophy, technology, or anything else that interests you. What would you like to discover today?");
+                    switch (variation) {
+                        0 => pos += writeStr(out[pos..], "Hello! I'm Omni-Mind, your AI knowledge companion. I'm here to help you explore any topic you're curious about. Feel free to ask me about science, history, philosophy, technology, or anything else that interests you. What would you like to discover today?"),
+                        1 => pos += writeStr(out[pos..], "Hi there! Great to see you. I've been learning new things and I'm excited to share. Whether you have a burning question or just want to explore an idea, I'm all ears. What's on your mind?"),
+                        2 => pos += writeStr(out[pos..], "Welcome! Every conversation with you adds something to my understanding. I'm ready to dive into any topic — from quantum physics to ancient history, from philosophy to the latest in AI. Where shall we begin?"),
+                        else => pos += writeStr(out[pos..], "Hey! Good to have you here. I'm not just a search engine — I think, I wonder, I connect ideas. So don't just ask me facts; ask me 'why' and 'what if'. What curious question do you have today?"),
+                    }
                 },
                 .arabic => {
-                    pos += writeStr(out[pos..], "أهلاً وسهلاً بك! أنا Omni-Mind، رفيقك في رحلة المعرفة. أنا هنا لمساعدتك في استكشاف أي موضوع يثير فضولك. اسألني عن العلوم أو التاريخ أو الفلسفة أو التكنولوجيا أو أي شيء آخر يهمك. ماذا تود أن تكتشف اليوم؟");
+                    switch (variation) {
+                        0 => pos += writeStr(out[pos..], "أهلاً وسهلاً بك! أنا Omni-Mind، رفيقك في رحلة المعرفة. أنا هنا لمساعدتك في استكشاف أي موضوع يثير فضولك. اسألني عن العلوم أو التاريخ أو الفلسفة أو التكنولوجيا أو أي شيء آخر يهمك. ماذا تود أن تكتشف اليوم؟"),
+                        1 => pos += writeStr(out[pos..], "مرحباً بك! سعيد برؤيتك. لقد كنت أتعلم أشياء جديدة وأتحمس لمشاركتها معك. سواء كان لديك سؤال محرق أو تريد استكشاف فكرة، أنا هنا أستمع إليك. ما الذي يشغل تفكيرك؟"),
+                        2 => pos += writeStr(out[pos..], "أهلاً! كل محادثة معك تضيف شيئاً لفهمي. أنا جاهز للغوص في أي موضوع — من فيزياء الكم إلى التاريخ القديم، من الفلسفة إلى أحدث ما في الذكاء الاصطناعي. من أين نبدأ؟"),
+                        else => pos += writeStr(out[pos..], "هلا والله! نورت. أنا لست مجرد محرك بحث — أنا أفكر وأتأمل وأربط الأفكار. فلا تسألني حقائق فقط؛ اسألني \"لماذا\" و\"ماذا لو\". ما السؤال الفضولي الذي لديك اليوم؟"),
+                    }
                 },
             }
         },
