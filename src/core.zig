@@ -544,6 +544,8 @@ fn generateNaturalAnswer(
 ) []const u8 {
     _ = tone;
     _ = subtext;
+    _ = query; // We don't echo the query — natural conversation
+    _ = tunnel_used; // Could add a "via analogy" note in future
 
     const out = out_buf.*;
     var pos: usize = 0;
