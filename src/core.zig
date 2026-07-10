@@ -280,16 +280,23 @@ pub fn runQuery(query: []const u8, out_buf: *[]u8) ![]const u8 {
 
     const start_ts = std.time.milliTimestamp();
 
+    // ─── Preprocess: normalize dialect, spelling, Arabizi ───
+    // This converts colloquial Arabic, spelling mistakes, and Franco-Arabic
+    // to Standard Arabic so the engine can understand any Arabic input.
+    const dialect = @import("core/dialect.zig");
+    var normalized_buf: [4096]u8 = undefined;
+    const normalized_query = dialect.preprocessQuery(query, &normalized_buf);
+
     // ─── Detect language ──────────────────────────────────
-    const detected_lang = Language.detect(query);
+    const detected_lang = Language.detect(normalized_query);
 
     // ─── Detect question type ─────────────────────────────
-    const qtype = QuestionType.detect(query, detected_lang);
+    const qtype = QuestionType.detect(normalized_query, detected_lang);
 
     // ─── Resolve anaphora (follow-up questions) ───────────
     // For "tell me more", find a DIFFERENT axiom in the same domain
     // that shares prerequisites with the previous answer.
-    var query_for_search: []const u8 = query;
+    var query_for_search: []const u8 = normalized_query;
     var exclude_axiom_id: u32 = 0;
     var has_exclusion = false;
 

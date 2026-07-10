@@ -11,6 +11,7 @@ test "core: node sizes" {
     _ = @import("core/conversation.zig");
     _ = @import("core/self.zig");
     _ = @import("core/learning.zig");
+    _ = @import("core/dialect.zig");
 }
 
 test "l1: axiom and collapse" {
