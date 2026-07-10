@@ -163,6 +163,7 @@ pub const Consciousness = struct {
     /// Generate a proactive insight or follow-up question.
     /// Returns the text to append after the main answer.
     pub fn generateProactiveInsight(self: *const Consciousness, query: []const u8, lang: u8, out: []u8) usize {
+        _ = query; // reserved for future personalized insights
         var pos: usize = 0;
 
         // Vary the proactive element to avoid repetition
