@@ -820,177 +820,220 @@ fn domainName(d: u8) []const u8 {
 
 /// Pick a domain hint from the query text via bilingual keyword matching.
 fn pickDomainHint(query: []const u8) u8 {
-    // Economics
+    // ─── Computer Science / Programming (check FIRST — most queries) ───
+    if (containsAny(query, &[_][]const u8{
+        // Languages
+        "Python", "JavaScript", "TypeScript", "Java", "Kotlin", "Swift",
+        "Rust", "Go ", "Golang", "C++", "C#", "Ruby", "PHP", "Scala",
+        "بايثون", "جافاسكريبت", "تايب", "جافا", "كوتلن", "سويفت", "راست", "غو",
+        // Web/Frameworks
+        "React", "Vue", "Angular", "Next.js", "Node", "Express", "Django",
+        "Flask", "Spring", "Svelte", "Laravel", "jQuery",
+        // Programming concepts
+        "algorithm", "programming", "code", "coding", "software", "developer",
+        "compiler", "debugger", "API", "function", "variable", "class", "object",
+        "method", "module", "library", "framework", "package", "dependency",
+        "GitHub", "Git ", "commit", "branch", "merge", "pull request",
+        "خوارزم", "برمجة", "كود", "برنامج", "مطور", "مكتبة", "إطار",
+        // Data structures
+        "array", "hash", "tree", "graph", "stack", "queue", "linked list",
+        "data structure", "binary", "sort", "search", "complexity", "Big O",
+        "مصفوفة", "شجرة", "مخطط", "كومة", "طابور",
+        // DevOps/Cloud
+        "Docker", "Kubernetes", "AWS", "Azure", "GCP", "serverless", "CI/CD",
+        "deployment", "container", "microservice", "DevOps",
+        "حاوية", "سحابة", "نشر",
+        // Databases
+        "SQL", "NoSQL", "database", "query", "index", "transaction", "ACID",
+        "MySQL", "PostgreSQL", "MongoDB", "Redis", "ORM",
+        "قاعدة بيانات", "استعلام",
+        // Web/Network
+        "HTTP", "HTTPS", "REST", "GraphQL", "gRPC", "WebSocket", "URL", "HTML",
+        "CSS", "frontend", "backend", "fullstack",
+        // Security
+        "encryption", "authentication", "authorization", "JWT", "OAuth",
+        "security", "vulnerability", "XSS", "CSRF", "injection",
+        "تشفير", "أمان", "مصادقة",
+        // AI/ML
+        "machine learning", "deep learning", "neural network", "AI", "ML",
+        "transformer", "embedding", "training", "inference", "model",
+        "تعلم الآلة", "ذكاء اصطناعي", "شبكة عصبية",
+        // Testing
+        "test", "testing", "TDD", "BDD", "unit test", "mock", "coverage",
+        "اختبار",
+        // Architecture
+        "design pattern", "SOLID", "DRY", "KISS", "YAGNI", "MVC", "MVVM",
+        "architecture", "refactoring", "clean code",
+        "نمط", "بنية", "إعادة هيكلة",
+        // General CS
+        "computer", "computing", "CPU", "memory", "RAM", "cache", "thread",
+        "process", "concurrency", "async", "parallel", "mutex", "deadlock",
+        "حاسوب", "معالج", "ذاكرة", "خيط", "عملية", "تزامن",
+    })) return @intFromEnum(Domain.computer_science);
+
+    // ─── Economics ───
     if (containsAny(query, &[_][]const u8{
         "market", "price", "trade", "economy", "supply", "demand", "inflation", "scarcity",
         "opportunity cost", "economies of scale", "game theory", "money", "interest", "GDP",
         "stock", "bond", "monopoly", "recession", "tax", "currency",
-        "fiscal", "monetary", "unemployment", "labor",
+        "fiscal", "monetary", "unemployment", "labor", "capitalism", "socialism",
         "سوق", "سعر", "تجارة", "اقتصاد", "عرض", "طلب", "تضخم", "ندرة",
         "تكلفة", "وفورات", "ألعاب", "نقود", "فائدة", "ناتج محلي",
         "أسهم", "سندات", "احتكار", "ركود", "ضرائب", "عملة",
-        "مالية", "نقدية", "بطالة", "عمل",
+        "مالية", "نقدية", "بطالة", "عمل", "رأسمالية", "اشتراكية",
     })) return @intFromEnum(Domain.economics);
 
-    // Logic
+    // ─── Logic ───
     if (containsAny(query, &[_][]const u8{
         "logic", "modus", "imply", "contradiction", "syllogism", "deductive", "entailment",
-        "inductive", "abductive", "tautology", "fallacy", "valid",
-        "منطق", "استنتاج", "تناقض", "قياس", "استقراء", "مغالطة", "حجة",
+        "inductive", "abductive", "tautology", "fallacy", "valid", "premise", "conclusion",
+        "منطق", "استنتاج", "تناقض", "قياس", "استقراء", "مغالطة", "حجة", "نتيجة",
     })) return @intFromEnum(Domain.logic);
 
-    // Physics
+    // ─── Physics ───
     if (containsAny(query, &[_][]const u8{
         "quantum", "physics", "energy", "friction", "heat", "motion", "braking",
         "superposition", "entanglement", "collapse", "measurement", "gravity", "light",
         "thermodynamics", "entropy", "waves", "force", "acceleration", "mass", "reaction",
+        "Newton", "Einstein", "Maxwell", "Ohm", "Coulomb", "voltage", "current",
         "كم", "فيزياء", "طاقة", "احتكاك", "حرارة", "حركة", "كبح", "تراكب", "تشابك", "انهيار", "قياس",
         "جاذبية", "ضوء", "ديناميكا", "إنتروبيا", "موجات", "قوة", "تسارع", "كتلة", "رد فعل",
     })) return @intFromEnum(Domain.physics);
 
-    // Computer Science
+    // ─── Mathematics ───
     if (containsAny(query, &[_][]const u8{
-        "AI", "neural", "algorithm", "computer", "information", "symbolic", "network",
-        "data structure", "compression", "bits", "encryption", "recursion",
-        "ذكاء", "خوارزم", "حاسوب", "معلومات", "رمزي", "شبكة", "ضغط", "بتات", "تشفير", "عودية",
-    })) return @intFromEnum(Domain.computer_science);
-
-    // Mathematics
-    if (containsAny(query, &[_][]const u8{
-        "math", "equation", "isomorphism", "diffusion", "vector", "algebra", "structure",
-        "schrodinger", "calculus", "probability", "set theory", "graph theory",
+        "math", "mathematics", "equation", "isomorphism", "diffusion", "vector", "algebra",
+        "structure", "schrodinger", "calculus", "probability", "set theory", "graph theory",
         "prime", "derivative", "integral", "matrix", "matrices",
         "Euler", "Fibonacci", "Pythagorean", "logarithm", "trigonometry",
         "statistics", "topology", "golden ratio", "factorial", "quadratic",
         "infinity", "mean", "deviation", "correlation", "complex number", "pi",
-        "رياض", "معادلة", "تماثل", "انتشار", "متجه", "جبر", "بنية",
+        "geometry", "arithmetic", "theorem", "proof",
+        "رياض", "رياضيات", "معادلة", "تماثل", "انتشار", "متجه", "جبر", "بنية",
         "تفاضل", "تكامل", "احتمال", "مجموعات", "مخططات", "أولي", "مصفوفة",
         "فيثاغورس", "لوغاريتم", "مثلثات", "إحصاء", "طوبولوجيا", "نسبة ذهبية",
         "عاملي", "تربيعية", "مالانهاية", "متوسط", "انحراف", "ارتباط", "باي",
+        "هندسة", "حساب", "نظرية", "برهان",
     })) return @intFromEnum(Domain.mathematics);
 
-    // Biology
+    // ─── Biology ───
     if (containsAny(query, &[_][]const u8{
-        "cell", "DNA", "neuron", "evolution", "natural selection", "genetic", "species",
+        "cell", "DNA", "RNA", "neuron", "evolution", "natural selection", "genetic", "species",
         "protein", "enzyme", "photosynthesis", "homeostasis", "mitochondria", "ribosome",
-        "ecosystem",
+        "ecosystem", "organism", "bacteria", "virus", "membrane", "chromosome",
         "خلية", "حمض نووي", "عصب", "تطور", "انتخاب طبيعي", "وراثي", "أنواع",
         "بروتين", "إنزيم", "تمثيل ضوئي", "اتزان", "ميتوكوندريا", "ريبوسوم", "نظام بيئي",
+        "كائن", "بكتيريا", "فيروس", "غشاء", "صبغي",
     })) return @intFromEnum(Domain.biology);
 
-    // Chemistry
+    // ─── Chemistry ───
     if (containsAny(query, &[_][]const u8{
         "atom", "molecule", "catalyst", "reaction", "chemical", "bond", "matter",
-        "acid", "base", "oxidation", "periodic", "equilibrium", "electron", "ionic", "covalent", "pH",
+        "acid", "base", "oxidation", "periodic", "equilibrium", "electron", "ionic", "covalent",
+        "pH", "mole", "isotope", "radioactive", "compound", "element",
         "ذرة", "جزيء", "حفاز", "تفاعل", "كيمياء", "رابطة", "مادة",
         "حمض", "قاعدة", "أكسدة", "دوري", "توازن", "إلكترون", "تساهمي",
+        "مول", "نظير", "مركب", "عنصر",
     })) return @intFromEnum(Domain.chemistry);
 
-    // Psychology
+    // ─── Psychology ───
     if (containsAny(query, &[_][]const u8{
         "behavior", "conditioning", "memory", "motivation", "emotion", "bias", "personality",
         "social influence", "psychology", "cognitive", "placebo", "Freud", "Piaget",
-        "Bandura", "defense mechanism", "flow state", "mindset",
+        "Bandura", "defense mechanism", "flow state", "mindset", "intelligence", "perception",
         "سلوك", "إشراط", "ذاكرة", "دافع", "مشاعر", "تحيز", "شخصية", "تأثير اجتماعي", "نفس",
-        "دواء وهمي", "فرويد", "بياجه", "باندورا", "تدفق", "عقلية",
+        "دواء وهمي", "فرويد", "بياجه", "باندورا", "تدفق", "عقلية", "ذكاء", "إدراك",
     })) return @intFromEnum(Domain.psychology);
 
-    // History
+    // ─── History ───
     if (containsAny(query, &[_][]const u8{
         "civilization", "agricultural revolution", "industrial revolution", "writing",
         "trade route", "war", "colonialism", "history", "ancient",
         "renaissance", "printing press", "cold war", "empire", "revolution",
         "medieval", "century", "battle", "French Revolution", "World War",
-        "Silk Road", "Roman",
+        "Silk Road", "Roman", "Egypt", "Greek", "dynasty", "crusade",
         "حضارة", "ثورة زراعية", "ثورة صناعية", "كتابة", "طرق تجارة", "حرب", "استعمار", "تاريخ", "قدماء",
         "نهضة", "مطبعة", "حرب باردة", "إمبراطورية", "ثورة", "وسيط", "قرن", "معركة",
-        "الثورة الفرنسية", "الحرب العالمية", "طريق الحرير", "رومانية",
+        "الثورة الفرنسية", "الحرب العالمية", "طريق الحرير", "رومانية", "مصر", "يونان", "سلالة",
     })) return @intFromEnum(Domain.history);
 
-    // Philosophy
+    // ─── Philosophy ───
     if (containsAny(query, &[_][]const u8{
         "existentialism", "ethics", "epistemology", "metaphysics", "utilitarianism",
-        "free will", "justice", "consciousness", "philosophy", "moral",
+        "free will", "justice", "consciousness", "philosophy", "moral", "nihilism",
         "Descartes", "Nietzsche", "Socrates", "Plato", "Aristotle", "Kant",
-        "Hume", "Mill", "Hegel", "Camus", "Confucius", "Locke",
+        "Hume", "Mill", "Hegel", "Camus", "Confucius", "Locke", "stoicism",
         "وجودية", "أخلاق", "معرفة", "ميتافيزيقا", "نفعية", "إرادة حرة", "عدالة", "وعي", "فلسفة",
         "ديكارت", "نيتشه", "سقراطر", "أفلاطون", "أرسطو", "كانط",
-        "هيوم", "مل", "هيغل", "كامو", "كونفوشيوس", "لوك",
+        "هيوم", "مل", "هيغل", "كامو", "كونفوشيوس", "لوك", "رواقية",
     })) return @intFromEnum(Domain.philosophy);
 
-    // Engineering — check early (Ohm, stress, strain are also physics words)
+    // ─── Engineering ───
     if (containsAny(query, &[_][]const u8{
         "Ohm", "bridge", "hydraulic", "aerodynamic", "concrete", "steel",
         "semiconductor", "renewable", "strain", "Newton", "mechanic",
         "circuit", "voltage", "current", "resistance", "material", "control system",
-        "engine", "feedback", "engineering", "load", "electrical",
+        "engine", "feedback", "engineering", "load", "electrical", "stress",
+        "thermodynamic cycle", "truss", "gear", "actuator", "sensor", "PID",
         "هيكل", "دائرة", "جهد", "تيار", "مادة", "تحكم", "محرك", "تغذية راجعة", "هندسة", "حمل",
-        "خرسانة", "فولاذ", "أوم", "جسر", "نصف ناقل",
+        "خرسانة", "فولاذ", "أوم", "جسر", "نصف ناقل", "ترس", "مستشعر",
     })) return @intFromEnum(Domain.engineering);
 
-    // Linguistics
+    // ─── Linguistics ───
     if (containsAny(query, &[_][]const u8{
         "language", "syntax", "semantics", "phonology", "pragmatics", "linguistics",
         "morphology", "grammar", "bilingual", "translation", "phoneme", "metaphor",
-        "code-switching", "sociolinguistics", "word formation",
+        "code-switching", "sociolinguistics", "word formation", "phonetics", "etymology",
+        "dialect", "discourse", "corpus", "simile", "hyperbole",
         "لغة", "نحو", "دلالة", "أصوات", "تداولية", "لسانيات",
-        "صرف", "قواعد", "ثنائية", "ترجمة", "فونيم", "استعارة",
+        "صرف", "قواعد", "ثنائية", "ترجمة", "فونيم", "استعارة", "لهجة",
     })) return @intFromEnum(Domain.linguistics);
 
-    // Astronomy
+    // ─── Astronomy ───
     if (containsAny(query, &[_][]const u8{
         "star", "black hole", "universe", "galaxy", "planet", "Big Bang", "astronomy", "space",
+        "Mars", "Jupiter", "Saturn", "Moon", "Sun", "solar", "telescope", "supernova",
         "نجم", "ثقب أسود", "كون", "مجرة", "كوكب", "انفجار عظيم", "فلك", "فضاء",
+        "مريخ", "مشتري", "زحل", "قمر", "شمس", "تلسكوب",
     })) return @intFromEnum(Domain.astronomy);
 
-    // Medicine — check BEFORE physics/chemistry (cancer, blood, etc.)
+    // ─── Medicine ───
     if (containsAny(query, &[_][]const u8{
         "vaccine", "antibiotic", "bacteria", "virus", "heart", "blood", "lung",
         "brain", "gene", "disease", "medicine", "immune", "health", "cancer",
         "diabetes", "cholesterol", "blood pressure", "doctor", "patient", "treatment",
-        "symptom", "diagnosis", "therapy", "infection", "fever", "pain",
+        "symptom", "diagnosis", "therapy", "infection", "fever", "pain", "anatomy",
+        "physiology", "pathology", "tumor", "insulin", "inflammation", "antibody",
         "لقاح", "مضاد حيوي", "بكتيريا", "فيروس", "قلب", "دم", "رئة",
         "دماغ", "جين", "مرض", "طب", "مناعة", "صحة", "سرطان",
         "سكري", "كوليسترول", "ضغط الدم", "طبيب", "مريض", "علاج",
-        "أعراض", "تشخيص", "علاج", "عدوى", "حمى", "ألم",
+        "أعراض", "تشخيص", "عدوى", "حمى", "ألم", "تشريح", "ورم", "أنسولين", "التهاب",
     })) return @intFromEnum(Domain.medicine);
 
-    // History — check before physics (renaissance, cold war, etc.)
-    if (containsAny(query, &[_][]const u8{
-        "civilization", "agricultural revolution", "industrial revolution", "writing",
-        "trade route", "war", "democracy", "colonialism", "history", "ancient",
-        "renaissance", "printing press", "internet revolution", "cold war",
-        "empire", "revolution", "medieval", "century", "battle",
-        "حضارة", "ثورة زراعية", "ثورة صناعية", "كتابة", "طرق تجارة", "حرب", "استعمار", "تاريخ", "قدماء",
-        "نهضة", "مطبعة", "ثورة الإنترنت", "حرب باردة", "إمبراطورية", "ثورة", "وسيط", "قرن", "معركة",
-    })) return @intFromEnum(Domain.history);
-
-    // Geology
+    // ─── Geology ───
     if (containsAny(query, &[_][]const u8{
         "tectonic", "earthquake", "volcano", "sedimentary", "fossil", "geology", "rock",
-        "plate", "magma", "erosion", "mineral", "crust", "mantle",
+        "plate", "magma", "erosion", "mineral", "crust", "mantle", "tsunami",
+        "Pangaea", "glacier", "continental drift", "igneous", "metamorphic",
         "صفائح", "زلزال", "بركان", "رسوبية", "حفريات", "جيولوجيا", "صخور",
-        "صهارة", "تعرية", "معدن", "قشرة", "وشاح",
+        "صهارة", "تعرية", "معدن", "قشرة", "وشاح", "تسونامي", "ناي",
     })) return @intFromEnum(Domain.geology);
 
-    // Engineering
-    if (containsAny(query, &[_][]const u8{
-        "structure", "circuit", "voltage", "current", "material", "control system",
-        "engine", "feedback", "engineering", "load", "mechanical", "electrical",
-        "هيكل", "دائرة", "جهد", "تيار", "مادة", "تحكم", "محرك", "تغذية راجعة", "هندسة", "حمل",
-    })) return @intFromEnum(Domain.engineering);
-
-    // Political Science
+    // ─── Political Science ───
     if (containsAny(query, &[_][]const u8{
         "democracy", "power", "constitution", "international", "law", "human rights",
         "government", "political", "citizen", "tyranny", "election", "parliament",
         "federalism", "authoritarian", "diplomacy", "nationalism", "sovereignty",
-        "propaganda", "judicial", "social contract", "legislation",
+        "propaganda", "judicial", "social contract", "legislation", "anarchism",
+        "conservatism", "liberalism", "capitalism", "treaty", "suffrage",
         "ديمقراطية", "سلطة", "دستور", "دولي", "قانون", "حقوق إنسان", "حكومة", "سياس", "مواطن", "استبداد",
         "انتخاب", "برلمان", "فيدرالية", "دبلوماسية", "قومية", "سيادة", "دعاية", "قضائية",
+        "فوضوية", "محافظة", "ليبرالية", "معاهدة",
     })) return @intFromEnum(Domain.political_science);
 
-    return @intFromEnum(Domain.physics); // default
+    // ─── Default: use general knowledge (not physics!) ───
+    // Return 0xFF = "any domain" so the system searches ALL domains.
+    return 0xFF;
 }
 
 /// Check if the query contains any of the keywords (case-insensitive for ASCII).
