@@ -81,5 +81,21 @@ pub fn build(b: *std.Build) void {
     run_verify.step.dependOn(b.getInstallStep());
     const verify_step = b.step("verify", "Native Zig verification of 1000 questions (no Python)");
     verify_step.dependOn(&run_verify.step);
+
+    // ─── Programming benchmark ─────────────────────────────
+    // Tests the system's software engineering knowledge.
+    const prog_bench = b.addExecutable(.{
+        .name = "omni-prog-bench",
+        .root_source_file = b.path("src/prog_bench.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    prog_bench.linkLibC();
+    b.installArtifact(prog_bench);
+
+    const run_prog = b.addRunArtifact(prog_bench);
+    run_prog.step.dependOn(b.getInstallStep());
+    const prog_step = b.step("prog-bench", "Run programming knowledge benchmark (98 questions)");
+    prog_step.dependOn(&run_prog.step);
 }
 
