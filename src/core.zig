@@ -56,6 +56,7 @@ pub var bootstrapped: bool = false;
 pub var conv_ctx: ConversationContext = .{};
 pub var self_state: SelfState = .{};
 pub var learning_engine: @import("core/learning.zig").LearningEngine = .{};
+pub var consciousness: @import("core/consciousness.zig").Consciousness = .{};
 
 /// Bootstrap the system: allocate all layers, load seed axioms.
 pub fn bootstrap() !void {
@@ -537,8 +538,12 @@ pub fn runQuery(query: []const u8, out_buf: *[]u8) ![]const u8 {
         }
     }
 
+    // ─── Consciousness: detect mood and record memory ───
+    consciousness.detectMood(normalized_query);
+    consciousness.remember(normalized_query, normalized_query, domain_hint, final_confidence > 0.5);
+
     // ─── Generate natural language answer ─────────────────
-    return generateNaturalAnswer(
+    const answer = generateNaturalAnswer(
         out_buf,
         query,
         qtype,
@@ -552,6 +557,20 @@ pub fn runQuery(query: []const u8, out_buf: *[]u8) ![]const u8 {
         start_ts,
         detected_lang,
     );
+
+    // ─── Consciousness: append proactive insight ───
+    // This adds personality, curiosity, and creative connections.
+    if (qtype != .greeting and qtype != .social) {
+        const out = out_buf.*;
+        var pos: usize = answer.len;
+        const lang_id: u8 = if (detected_lang == .arabic) 0 else 1;
+        const insight_len = consciousness.generateProactiveInsight(normalized_query, lang_id, out[pos..]);
+        pos += insight_len;
+        out_buf.* = out[pos..];
+        return out[0..pos];
+    }
+
+    return answer;
 }
 
 /// Generate a natural language answer using the conversation engine.
