@@ -55,6 +55,10 @@ pub fn search_source(topic: &str, language: &str, source: &str) -> Option<Intern
         "github" => search_github(topic),
         "stackexchange" => search_stackexchange(topic),
         "hackernews" => search_hackernews(topic),
+        "mdn" => search_mdn(topic),
+        "devto" => search_devto(topic),
+        "npm" => search_npm(topic),
+        "pypi" => search_pypi(topic),
         _ => None,
     }
 }
@@ -72,6 +76,10 @@ pub fn search_all_sources(topic: &str, language: &str) -> AggregatedKnowledge {
         "github",
         "stackexchange",
         "hackernews",
+        "mdn",
+        "devto",
+        "npm",
+        "pypi",
     ];
 
     let mut facts = Vec::new();
@@ -109,6 +117,10 @@ pub fn list_sources() -> Vec<&'static str> {
         "github",
         "stackexchange",
         "hackernews",
+        "mdn",
+        "devto",
+        "npm",
+        "pypi",
     ]
 }
 
@@ -659,6 +671,143 @@ fn url_encode(s: &str) -> String {
         }
     }
     result
+}
+
+/// Search MDN Web Docs for web API documentation.
+pub fn search_mdn(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching MDN Web Docs for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/api/v1/search?q={}&size=1", encoded_topic);
+
+    let body = https_get("developer.mozilla.org", &path)?;
+
+    let title = extract_json_string_field(&body, "title")?;
+    let excerpt = extract_json_string_field(&body, "excerpt").unwrap_or_default();
+
+    if title.len() < 3 {
+        return None;
+    }
+
+    let combined = if excerpt.is_empty() {
+        format!("MDN documentation: {}", title)
+    } else {
+        format!("MDN: {}. {}", title, excerpt)
+    };
+
+    let source_url = format!("https://developer.mozilla.org/search?q={}", encoded_topic);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url,
+        source_name: "MDN Web Docs".to_string(),
+        language: "en".to_string(),
+        confidence: 0.8,
+    })
+}
+
+/// Search Dev.to for programming articles and tutorials.
+pub fn search_devto(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching Dev.to for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/api/articles?tag={}&per_page=1", encoded_topic);
+
+    let body = https_get("dev.to", &path)?;
+
+    // Dev.to returns array; extract first article.
+    let title = extract_json_string_field(&body, "title")?;
+    let description = extract_json_string_field(&body, "description").unwrap_or_default();
+
+    if title.len() < 3 {
+        return None;
+    }
+
+    let combined = if description.is_empty() {
+        format!("Dev.to article: {}", title)
+    } else {
+        format!("Dev.to article: {}. {}", title, description)
+    };
+
+    let slug = extract_json_string_field(&body, "slug").unwrap_or_default();
+    let source_url = if slug.is_empty() {
+        format!("https://dev.to/t/{}", encoded_topic)
+    } else {
+        format!("https://dev.to/{}", slug)
+    };
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url,
+        source_name: "Dev.to".to_string(),
+        language: "en".to_string(),
+        confidence: 0.6,
+    })
+}
+
+/// Search npm registry for JavaScript packages.
+pub fn search_npm(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching npm for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/-/v1/search?text={}&size=1", encoded_topic);
+
+    let body = https_get("registry.npmjs.org", &path)?;
+
+    let name = extract_json_string_field(&body, "name")?;
+    let description = extract_json_string_field(&body, "description").unwrap_or_default();
+
+    if name.len() < 2 {
+        return None;
+    }
+
+    let combined = if description.is_empty() {
+        format!("npm package: {}", name)
+    } else {
+        format!("npm package {}: {}", name, description)
+    };
+
+    let source_url = format!("https://www.npmjs.com/package/{}", name);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url,
+        source_name: "npm".to_string(),
+        language: "en".to_string(),
+        confidence: 0.6,
+    })
+}
+
+/// Search PyPI for Python packages.
+pub fn search_pypi(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching PyPI for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/search/?q={}", encoded_topic);
+
+    let body = https_get("pypi.org", &path)?;
+
+    // PyPI returns HTML; try to extract package name from title.
+    let title = extract_xml_field(&body, "title")?;
+
+    if title.len() < 5 {
+        return None;
+    }
+
+    let combined = format!("PyPI search for {}: {}", topic, title);
+    let source_url = format!("https://pypi.org/search/?q={}", encoded_topic);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url,
+        source_name: "PyPI".to_string(),
+        language: "en".to_string(),
+        confidence: 0.6,
+    })
 }
 
 #[cfg(test)]
