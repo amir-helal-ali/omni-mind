@@ -797,11 +797,19 @@ fn extract_json_int(json: &str, key: &str) -> Option<i64> {
 }
 
 fn escape_json(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
+    let mut result = String::with_capacity(s.len() + 16);
+    for ch in s.chars() {
+        match ch {
+            '\\' => result.push_str("\\\\"),
+            '"' => result.push_str("\\\""),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            '\x00'..='\x1F' => result.push_str(&format!("\\u{:04x}", ch as u32)),
+            _ => result.push(ch),
+        }
+    }
+    result
 }
 
 const HTML_PAGE: &str = r#"<!DOCTYPE html>
