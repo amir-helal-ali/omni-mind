@@ -172,6 +172,7 @@ fn handleCommand(state: *ReplState, input: []const u8, stdout: anytype) !void {
             \\  /history        — show recent memory for current user
             \\  /stats          — show system stats
             \\  /learning       — show learning engine status (self-improvement)
+            \\  /consciousness  — show consciousness & personality state
             \\  /ingest D TEXT  — add axiom (D = domain 0-9)
             \\  /list           — list all axioms (English)
             \\  /list ar        — list all axioms (Arabic)
@@ -390,6 +391,13 @@ fn handleCommand(state: *ReplState, input: []const u8, stdout: anytype) !void {
         try stdout.print("    • Near-matches → synonyms learned for future use\n", .{});
         try stdout.print("    • Successful patterns → faster future matching\n", .{});
         try stdout.print("\n  The system gets smarter with every interaction.\n\n", .{});
+        return;
+    }
+
+    if (std.mem.eql(u8, input, "/consciousness") or std.mem.eql(u8, input, "/mind")) {
+        var buf: [2048]u8 = undefined;
+        const n = core.consciousness.personalitySummary(&buf);
+        try stdout.print("\n{s}\n", .{buf[0..n]});
         return;
     }
 
