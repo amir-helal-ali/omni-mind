@@ -315,9 +315,9 @@ fn extract_ingest(body: &str) -> (u8, String) {
     (0, body.trim().to_string())
 }
 
-/// Handle /api/learn — learn about a topic from Wikipedia.
+/// Handle /api/learn — learn about a topic from MULTIPLE internet sources.
 /// Body: {"topic":"energy","lang":"en"} or {"topic":"الطاقة","lang":"ar"}
-/// Fetches from Wikipedia, extracts summary, ingests as axiom.
+/// Searches all configured sources, aggregates results, ingests as axiom.
 fn handle_learn(body: &str) -> (&'static str, &'static str, String) {
     let topic = match extract_json_string(body, "topic") {
         Some(t) if !t.is_empty() => t,
@@ -326,41 +326,48 @@ fn handle_learn(body: &str) -> (&'static str, &'static str, String) {
     };
     let lang = extract_json_string(body, "lang").unwrap_or_else(|| "en".to_string());
 
-    log::info!("Learning request: topic='{}', lang='{}'", topic, lang);
+    log::info!("Multi-source learning request: topic='{}', lang='{}'", topic, lang);
 
-    // Search Wikipedia for the topic.
-    let fact = match crate::internet::search_wikipedia(&topic, &lang) {
-        Some(f) => f,
-        None => return ("404 Not Found", "application/json",
-            format!(r#"{{"error":"no Wikipedia article found for '{}'"}}"#, escape_json(&topic))),
-    };
+    // Search ALL sources and aggregate.
+    let knowledge = crate::internet::search_all_sources(&topic, &lang);
 
-    // Convert to axiom text.
-    let axiom_text = crate::internet::fact_to_axiom_text(&fact);
+    if knowledge.facts.is_empty() {
+        return ("404 Not Found", "application/json",
+            format!(r#"{{"error":"no information found for '{}' in any source"}}"#, escape_json(&topic)));
+    }
 
-    // Determine domain from the topic (simple heuristic).
+    // Convert to axiom text (uses the best fact + source count).
+    let axiom_text = crate::internet::aggregated_to_axiom(&knowledge);
+
+    // Determine domain from the topic.
     let domain = guess_domain(&topic);
 
     // Ingest into the knowledge base.
-    match ffi::safe_inject_axiom(domain, &axiom_text, fact.confidence) {
+    match ffi::safe_inject_axiom(domain, &axiom_text, 0.75) {
         Ok(()) => {
-            log::info!("Learned from internet: '{}' → domain {}", axiom_text, domain);
+            log::info!("Learned from {} sources: '{}' → domain {}", knowledge.sources_count, axiom_text, domain);
+
+            // Build sources list for response.
+            let sources_list: Vec<String> = knowledge.facts.iter()
+                .map(|f| format!(r#"{{"name":"{}","url":"{}"}}"#, escape_json(&f.source_name), escape_json(&f.source_url)))
+                .collect();
+
             ("200 OK", "application/json",
-                format!(r#"{{"status":"learned","topic":"{}","axiom":"{}","source":"{}","domain":{}}}"#,
+                format!(r#"{{"status":"learned","topic":"{}","axiom":"{}","domain":{},"sources_count":{},"sources":[{}]}}"#,
                     escape_json(&topic),
                     escape_json(&axiom_text),
-                    escape_json(&fact.source_url),
-                    domain))
+                    domain,
+                    knowledge.sources_count,
+                    sources_list.join(",")))
         }
         Err(e) => ("500 Internal Server Error", "application/json",
             format!(r#"{{"error":"ingest failed: code {}}}"#, e)),
     }
 }
 
-/// Handle /api/search?q=topic — search Wikipedia without ingesting.
-/// Returns the summary as JSON.
+/// Handle /api/search?q=topic — search multiple sources without ingesting.
+/// Returns aggregated summaries as JSON.
 fn handle_search(query_string: &str) -> (&'static str, &'static str, String) {
-    // Parse q= from query string.
     let topic = query_string
         .strip_prefix("q=")
         .unwrap_or("")
@@ -374,17 +381,26 @@ fn handle_search(query_string: &str) -> (&'static str, &'static str, String) {
             r#"{"error":"missing q parameter"}"#.to_string());
     }
 
-    let fact = match crate::internet::search_wikipedia(&topic, "en") {
-        Some(f) => f,
-        None => return ("404 Not Found", "application/json",
-            format!(r#"{{"error":"not found"}}"#)),
-    };
+    let knowledge = crate::internet::search_all_sources(&topic, "en");
+
+    if knowledge.facts.is_empty() {
+        return ("404 Not Found", "application/json",
+            r#"{"error":"not found in any source"}"#.to_string());
+    }
+
+    let facts_json: Vec<String> = knowledge.facts.iter()
+        .map(|f| format!(r#"{{"source":"{}","summary":"{}","url":"{}","confidence":{}}}"#,
+            escape_json(&f.source_name),
+            escape_json(&f.summary),
+            escape_json(&f.source_url),
+            f.confidence))
+        .collect();
 
     ("200 OK", "application/json",
-        format!(r#"{{"topic":"{}","summary":"{}","source":"{}"}}"#,
-            escape_json(&fact.topic),
-            escape_json(&fact.summary),
-            escape_json(&fact.source_url)))
+        format!(r#"{{"topic":"{}","sources_count":{},"facts":[{}]}}"#,
+            escape_json(&topic),
+            knowledge.sources_count,
+            facts_json.join(",")))
 }
 
 /// Simple heuristic to guess the domain (0-15) from a topic.
@@ -757,7 +773,7 @@ async function learnFromInternet() {
   }
   document.getElementById('loading').classList.add('active');
   document.getElementById('answer').classList.add('empty');
-  document.getElementById('answer').textContent = 'جاري التعلم من الإنترنت...';
+  document.getElementById('answer').textContent = '🌐 جاري التعلم من مصادر متعددة...';
   try {
     const lang = /[\u0600-\u06FF]/.test(q) ? 'ar' : 'en';
     const res = await fetch('/api/learn', {
@@ -768,12 +784,18 @@ async function learnFromInternet() {
     const data = await res.json();
     document.getElementById('answer').classList.remove('empty');
     if (data.status === 'learned') {
+      let sourcesList = '';
+      if (data.sources && data.sources.length > 0) {
+        sourcesList = '\n\n📚 المصادر المستخدمة:\n';
+        data.sources.forEach(s => {
+          sourcesList += '  • ' + s.name + ': ' + s.url + '\n';
+        });
+      }
       document.getElementById('answer').textContent =
-        '✓ تم التعلم من الإنترنت!\n\n' +
+        '✓ تم التعلم من ' + data.sources_count + ' مصادر!\n\n' +
         'الموضوع: ' + data.topic + '\n' +
         'البديهية الجديدة: ' + data.axiom + '\n' +
-        'المصدر: ' + data.source + '\n' +
-        'المجال: ' + data.domain;
+        'المجال: ' + data.domain + sourcesList;
     } else {
       document.getElementById('answer').textContent = 'فشل التعلم: ' + (data.error || 'غير معروف');
     }

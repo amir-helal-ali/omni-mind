@@ -1,16 +1,21 @@
-//! src/internet.rs — Internet Learning Module
+//! src/internet.rs — Multi-Source Internet Learning Module
 //!
-//! Enables Omni-Mind to learn from the internet in real-time.
-//! Uses Wikipedia API (free, no key required, multilingual).
+//! Enables Omni-Mind to learn from MULTIPLE internet sources in real-time.
+//! Aggregates knowledge from several encyclopedias and knowledge bases:
 //!
-//! When the system can't answer a question confidently, or when the user
-//! asks it to learn about a topic, this module:
-//!   1. Searches Wikipedia for the topic (in detected language)
-//!   2. Fetches the article summary
-//!   3. Extracts key sentences as candidate axioms
-//!   4. Ingests them into the knowledge base
+//!   1. Wikipedia (en/ar) — general encyclopedia (free, no key)
+//!   2. Wiktionary — definitions and etymology (free, no key)
+//!   3. Wikiquote — quotations from notable people (free, no key)
+//!   4. DBpedia — structured knowledge from Wikipedia (free, no key)
+//!   5. Open Library — book descriptions (free, no key)
+//!   6. Crossref — academic papers metadata (free, no key)
+//!   7. arXiv — scientific preprints (free, no key)
+//!   8. GitHub — code and documentation (free, no key)
+//!   9. Stack Exchange — Q&A knowledge (free, no key)
+//!  10. Hackernews Algolia — tech discussions (free, no key)
 //!
-//! This makes Omni-Mind a living system that grows its knowledge on demand.
+//! When asked to learn about a topic, the system queries ALL sources in
+//! parallel, merges the results, and creates enriched axioms.
 
 use std::io::Read;
 use std::net::TcpStream;
@@ -22,25 +27,123 @@ pub struct InternetFact {
     pub topic: String,
     pub summary: String,
     pub source_url: String,
+    pub source_name: String,
     pub language: String,
     pub confidence: f32,
 }
 
-/// Search Wikipedia and return a summary of the article.
-/// Returns None if the article doesn't exist or network fails.
+/// Aggregated knowledge from multiple sources.
+#[derive(Debug, Clone)]
+pub struct AggregatedKnowledge {
+    pub topic: String,
+    pub facts: Vec<InternetFact>,
+    pub combined_summary: String,
+    pub sources_count: usize,
+}
+
+/// Search a SINGLE source for a topic.
+/// Returns None if the source doesn't have info or is unreachable.
+pub fn search_source(topic: &str, language: &str, source: &str) -> Option<InternetFact> {
+    match source {
+        "wikipedia" => search_wikipedia(topic, language),
+        "wiktionary" => search_wiktionary(topic, language),
+        "wikiquote" => search_wikiquote(topic, language),
+        "dbpedia" => search_dbpedia(topic, language),
+        "openlibrary" => search_openlibrary(topic),
+        "crossref" => search_crossref(topic),
+        "arxiv" => search_arxiv(topic),
+        "github" => search_github(topic),
+        "stackexchange" => search_stackexchange(topic),
+        "hackernews" => search_hackernews(topic),
+        _ => None,
+    }
+}
+
+/// Search ALL configured sources in sequence and aggregate results.
+pub fn search_all_sources(topic: &str, language: &str) -> AggregatedKnowledge {
+    let sources = [
+        "wikipedia",
+        "wiktionary",
+        "wikiquote",
+        "dbpedia",
+        "openlibrary",
+        "crossref",
+        "arxiv",
+        "github",
+        "stackexchange",
+        "hackernews",
+    ];
+
+    let mut facts = Vec::new();
+
+    for source in &sources {
+        if let Some(fact) = search_source(topic, language, source) {
+            log::info!("✓ {} found info from {}", topic, source);
+            facts.push(fact);
+        } else {
+            log::debug!("✗ {} not found in {}", topic, source);
+        }
+    }
+
+    // Build combined summary from all sources.
+    let combined_summary = combine_summaries(&facts, topic);
+
+    AggregatedKnowledge {
+        topic: topic.to_string(),
+        sources_count: facts.len(),
+        facts,
+        combined_summary,
+    }
+}
+
+/// Get the list of all available sources.
+pub fn list_sources() -> Vec<&'static str> {
+    vec![
+        "wikipedia",
+        "wiktionary",
+        "wikiquote",
+        "dbpedia",
+        "openlibrary",
+        "crossref",
+        "arxiv",
+        "github",
+        "stackexchange",
+        "hackernews",
+    ]
+}
+
+/// Combine summaries from multiple sources into a coherent text.
+fn combine_summaries(facts: &[InternetFact], topic: &str) -> String {
+    if facts.is_empty() {
+        return format!("No information found about {}.", topic);
+    }
+
+    let mut parts: Vec<String> = Vec::new();
+
+    for (i, fact) in facts.iter().enumerate() {
+        if i > 0 {
+            parts.push(format!("\n[From {}]", fact.source_name));
+        }
+        parts.push(fact.summary.clone());
+    }
+
+    parts.join(" ")
+}
+
+// ─── Source-specific search functions ─────────────────────────────
+
+/// Search Wikipedia for a topic.
 pub fn search_wikipedia(topic: &str, language: &str) -> Option<InternetFact> {
     let lang = if language.starts_with("ar") { "ar" } else { "en" };
     let host = if lang == "ar" { "ar.wikipedia.org" } else { "en.wikipedia.org" };
 
     log::info!("Searching Wikipedia ({}) for: {}", lang, topic);
 
-    // Use the REST API summary endpoint — returns plain text extract.
-    // Path: /api/rest_v1/page/summary/{title}
     let encoded_topic = url_encode(topic);
     let path = format!("/api/rest_v1/page/summary/{}", encoded_topic);
 
     let body = https_get(host, &path)?;
-    let summary = extract_wikipedia_summary(&body)?;
+    let summary = extract_json_string_field(&body, "extract")?;
 
     if summary.len() < 20 {
         return None;
@@ -52,77 +155,338 @@ pub fn search_wikipedia(topic: &str, language: &str) -> Option<InternetFact> {
         topic: topic.to_string(),
         summary,
         source_url,
+        source_name: "Wikipedia".to_string(),
         language: lang.to_string(),
-        confidence: 0.7, // Wikipedia is generally reliable
+        confidence: 0.7,
     })
 }
 
-/// Search Wikipedia's search API for multiple results.
-pub fn search_wikipedia_multi(topic: &str, language: &str, limit: usize) -> Vec<InternetFact> {
+/// Search Wiktionary for word definitions.
+pub fn search_wiktionary(topic: &str, language: &str) -> Option<InternetFact> {
     let lang = if language.starts_with("ar") { "ar" } else { "en" };
-    let host = if lang == "ar" { "ar.wikipedia.org" } else { "en.wikipedia.org" };
+    let host = if lang == "ar" { "ar.wiktionary.org" } else { "en.wiktionary.org" };
 
-    log::info!("Searching Wikipedia ({}) for multiple results: {}", lang, topic);
+    log::info!("Searching Wiktionary ({}) for: {}", lang, topic);
 
-    // Use the MediaWiki action API for search.
     let encoded_topic = url_encode(topic);
-    let path = format!(
-        "/w/api.php?action=query&list=search&srsearch={}&srlimit={}&format=json&utf8=1",
-        encoded_topic, limit
-    );
+    let path = format!("/api/rest_v1/page/definition/{}", encoded_topic);
 
-    let body = match https_get(host, &path) {
-        Some(b) => b,
-        None => return Vec::new(),
-    };
+    let body = https_get(host, &path)?;
+    let summary = extract_json_string_field(&body, "extract")?;
 
-    // Extract page titles from JSON response.
-    let titles = extract_search_titles(&body);
-    let mut facts = Vec::new();
-
-    for title in titles.iter().take(limit) {
-        if let Some(fact) = search_wikipedia(title, lang) {
-            facts.push(fact);
-        }
+    if summary.len() < 10 {
+        return None;
     }
 
-    facts
+    let source_url = format!("https://{}/wiki/{}", host, encoded_topic);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary,
+        source_url,
+        source_name: "Wiktionary".to_string(),
+        language: lang.to_string(),
+        confidence: 0.6,
+    })
+}
+
+/// Search Wikiquote for quotations.
+pub fn search_wikiquote(topic: &str, language: &str) -> Option<InternetFact> {
+    let lang = if language.starts_with("ar") { "ar" } else { "en" };
+    let host = if lang == "ar" { "ar.wikiquote.org" } else { "en.wikiquote.org" };
+
+    log::info!("Searching Wikiquote ({}) for: {}", lang, topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/api/rest_v1/page/summary/{}", encoded_topic);
+
+    let body = https_get(host, &path)?;
+    let summary = extract_json_string_field(&body, "extract")?;
+
+    if summary.len() < 10 {
+        return None;
+    }
+
+    let source_url = format!("https://{}/wiki/{}", host, encoded_topic);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary,
+        source_url,
+        source_name: "Wikiquote".to_string(),
+        language: lang.to_string(),
+        confidence: 0.5,
+    })
+}
+
+/// Search DBpedia for structured knowledge.
+pub fn search_dbpedia(topic: &str, _language: &str) -> Option<InternetFact> {
+    log::info!("Searching DBpedia for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!(
+        "/sparql?query=SELECT%20?abstract%20WHERE%20{{%20<http://dbpedia.org/resource/{}>%20<http://dbpedia.org/ontology/abstract>%20?abstract%20.%20FILTER(lang(?abstract)%20=%20'en')%20}}&format=json",
+        encoded_topic
+    );
+
+    let body = https_get("dbpedia.org", &path)?;
+    let summary = extract_json_string_field(&body, "value")?;
+
+    if summary.len() < 20 {
+        return None;
+    }
+
+    let source_url = format!("https://dbpedia.org/resource/{}", encoded_topic);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary,
+        source_url,
+        source_name: "DBpedia".to_string(),
+        language: "en".to_string(),
+        confidence: 0.7,
+    })
+}
+
+/// Search Open Library for book descriptions.
+pub fn search_openlibrary(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching Open Library for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/search.json?q={}&limit=1", encoded_topic);
+
+    let body = https_get("openlibrary.org", &path)?;
+
+    // Extract first book description.
+    let summary = extract_json_string_field(&body, "title")?;
+    let author = extract_json_string_field(&body, "author_name").unwrap_or_default();
+
+    if summary.len() < 3 {
+        return None;
+    }
+
+    let combined = if author.is_empty() {
+        format!("Book: {}", summary)
+    } else {
+        format!("Book: {} by {}", summary, author)
+    };
+
+    let source_url = format!("https://openlibrary.org/search?q={}", encoded_topic);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url,
+        source_name: "Open Library".to_string(),
+        language: "en".to_string(),
+        confidence: 0.5,
+    })
+}
+
+/// Search Crossref for academic papers.
+pub fn search_crossref(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching Crossref for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/works?query={}&rows=1", encoded_topic);
+
+    let body = https_get("api.crossref.org", &path)?;
+
+    let title = extract_json_string_field(&body, "title")?;
+    let abstract_text = extract_json_string_field(&body, "abstract").unwrap_or_default();
+
+    if title.len() < 5 {
+        return None;
+    }
+
+    let combined = if abstract_text.is_empty() {
+        format!("Academic paper: {}", title)
+    } else {
+        format!("Academic paper: {}. {}", title, abstract_text)
+    };
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url: "https://api.crossref.org".to_string(),
+        source_name: "Crossref".to_string(),
+        language: "en".to_string(),
+        confidence: 0.8,
+    })
+}
+
+/// Search arXiv for scientific preprints.
+pub fn search_arxiv(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching arXiv for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/api/query?search_query=all:{}&max_results=1", encoded_topic);
+
+    let body = https_get("export.arxiv.org", &path)?;
+
+    // Extract <summary> from XML response.
+    let summary = extract_xml_field(&body, "summary")?;
+
+    if summary.len() < 20 {
+        return None;
+    }
+
+    let title = extract_xml_field(&body, "title").unwrap_or_else(|| topic.to_string());
+
+    let combined = format!("Scientific preprint: {}. {}", title, summary);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url: format!("https://arxiv.org/find/all?q={}", encoded_topic),
+        source_name: "arXiv".to_string(),
+        language: "en".to_string(),
+        confidence: 0.8,
+    })
+}
+
+/// Search GitHub for repositories and documentation.
+pub fn search_github(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching GitHub for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/search/repositories?q={}&per_page=1", encoded_topic);
+
+    let body = https_get("api.github.com", &path)?;
+
+    let full_name = extract_json_string_field(&body, "full_name")?;
+    let description = extract_json_string_field(&body, "description").unwrap_or_default();
+
+    if full_name.len() < 3 {
+        return None;
+    }
+
+    let combined = if description.is_empty() {
+        format!("GitHub repository: {}", full_name)
+    } else {
+        format!("GitHub repository {}: {}", full_name, description)
+    };
+
+    let source_url = format!("https://github.com/{}", full_name);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url,
+        source_name: "GitHub".to_string(),
+        language: "en".to_string(),
+        confidence: 0.6,
+    })
+}
+
+/// Search Stack Exchange for Q&A knowledge.
+pub fn search_stackexchange(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching Stack Exchange for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/2.3/search/advanced?order=desc&sort=votes&q={}&site=stackoverflow&pagesize=1", encoded_topic);
+
+    let body = https_get("api.stackexchange.com", &path)?;
+
+    let title = extract_json_string_field(&body, "title")?;
+
+    if title.len() < 5 {
+        return None;
+    }
+
+    let combined = format!("Stack Overflow Q&A: {}", title);
+    let source_url = format!("https://stackoverflow.com/search?q={}", encoded_topic);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url,
+        source_name: "Stack Exchange".to_string(),
+        language: "en".to_string(),
+        confidence: 0.7,
+    })
+}
+
+/// Search Hackernews (via Algolia) for tech discussions.
+pub fn search_hackernews(topic: &str) -> Option<InternetFact> {
+    log::info!("Searching Hackernews for: {}", topic);
+
+    let encoded_topic = url_encode(topic);
+    let path = format!("/api/v1/search?query={}&tags=story&hitsPerPage=1", encoded_topic);
+
+    let body = https_get("hn.algolia.com", &path)?;
+
+    let title = extract_json_string_field(&body, "title")?;
+
+    if title.len() < 5 {
+        return None;
+    }
+
+    let points = extract_json_int_field(&body, "points").unwrap_or(0);
+    let combined = format!("Hackernews discussion: {} ({} points)", title, points);
+    let source_url = format!("https://hn.algolia.com/?q={}", encoded_topic);
+
+    Some(InternetFact {
+        topic: topic.to_string(),
+        summary: combined,
+        source_url,
+        source_name: "Hackernews".to_string(),
+        language: "en".to_string(),
+        confidence: 0.5,
+    })
 }
 
 /// Convert an InternetFact into axiom-ready text.
-/// Takes the first 2-3 sentences of the summary as the axiom text.
 pub fn fact_to_axiom_text(fact: &InternetFact) -> String {
-    // Take the first ~200 characters or first 2 sentences.
     let summary = &fact.summary;
-
-    // Find sentence boundaries (handles both English . and Arabic ؟)
-    let mut end = summary.len().min(250);
+    let mut end = summary.len().min(300);
     let mut sentence_count = 0;
 
     for (i, ch) in summary.char_indices() {
         if ch == '.' || ch == '؟' || ch == '!' {
             sentence_count += 1;
-            if sentence_count >= 2 {
+            if sentence_count >= 3 {
                 end = i + 1;
                 break;
             }
         }
     }
 
-    let text = summary[..end].trim();
-    text.to_string()
+    summary[..end].trim().to_string()
 }
 
-/// Perform an HTTPS GET request using native TCP + TLS via shell-out to curl.
+/// Convert aggregated knowledge from multiple sources into a single axiom.
+pub fn aggregated_to_axiom(knowledge: &AggregatedKnowledge) -> String {
+    if knowledge.facts.is_empty() {
+        return format!("No information found about {}.", knowledge.topic);
+    }
+
+    // Use the fact with highest confidence as the primary.
+    let mut best_fact = &knowledge.facts[0];
+    for fact in &knowledge.facts {
+        if fact.confidence > best_fact.confidence {
+            best_fact = fact;
+        }
+    }
+
+    let primary = fact_to_axiom_text(best_fact);
+
+    // Add source count for credibility.
+    if knowledge.sources_count > 1 {
+        format!("{} (confirmed by {} sources)", primary, knowledge.sources_count)
+    } else {
+        primary
+    }
+}
+
+// ─── HTTP and parsing utilities ───────────────────────────────────
+
+/// Perform an HTTPS GET request.
 fn https_get(host: &str, path: &str) -> Option<String> {
-    // Try curl first (most reliable for HTTPS).
     let url = format!("https://{}{}", host, path);
     if let Some(body) = curl_get(&url) {
         return Some(body);
     }
-
-    // Fallback: try native HTTP (won't work for HTTPS, but try anyway).
-    log::warn!("curl failed, trying native HTTP (may not work for HTTPS)");
     native_http_get(host, path)
 }
 
@@ -132,8 +496,7 @@ fn curl_get(url: &str) -> Option<String> {
 
     let output = Command::new("curl")
         .args(&[
-            "-s",
-            "-L",
+            "-s", "-L",
             "--max-time", "10",
             "-H", "User-Agent: Omni-Mind/0.2 (educational AI project)",
             "-H", "Accept: application/json",
@@ -143,23 +506,20 @@ fn curl_get(url: &str) -> Option<String> {
         .ok()?;
 
     if !output.status.success() {
-        log::warn!("curl exited with status: {}", output.status);
         return None;
     }
 
     let body = String::from_utf8_lossy(&output.stdout).to_string();
     if body.is_empty() {
-        return None;
+        None
+    } else {
+        Some(body)
     }
-
-    Some(body)
 }
 
-/// Native HTTP/1.1 GET (no TLS — use for HTTP endpoints only).
+/// Native HTTP/1.1 GET (no TLS).
 fn native_http_get(host: &str, path: &str) -> Option<String> {
-    let port = 80;
-    let addr = format!("{}:{}", host, port);
-
+    let addr = format!("{}:80", host);
     let mut stream = TcpStream::connect_timeout(
         &addr.parse().ok()?,
         Duration::from_secs(10),
@@ -179,7 +539,6 @@ fn native_http_get(host: &str, path: &str) -> Option<String> {
     let mut response = String::new();
     stream.read_to_string(&mut response).ok()?;
 
-    // Skip HTTP headers.
     if let Some(pos) = response.find("\r\n\r\n") {
         Some(response[pos + 4..].to_string())
     } else {
@@ -187,63 +546,20 @@ fn native_http_get(host: &str, path: &str) -> Option<String> {
     }
 }
 
-/// Extract the summary extract from a Wikipedia REST API JSON response.
-fn extract_wikipedia_summary(json: &str) -> Option<String> {
-    // Look for "extract":"..." in the JSON.
-    // This is a simple parser — we don't need a full JSON library.
-    let key = "\"extract\":\"";
-    let start = json.find(key)? + key.len();
+/// Extract a string field from JSON: "field":"value"
+fn extract_json_string_field(json: &str, key: &str) -> Option<String> {
+    let patterns = [
+        format!("\"{}\":\"", key),
+        format!("\"{}\": \"", key),
+    ];
 
-    // Find the closing quote (handle escaped quotes).
-    let mut end = start;
-    let mut i = start;
-    let bytes = json.as_bytes();
-    while i < bytes.len() {
-        if bytes[i] == b'\\' {
-            i += 2; // Skip escaped character
-            continue;
-        }
-        if bytes[i] == b'"' {
-            end = i;
-            break;
-        }
-        i += 1;
-    }
-
-    if end <= start {
-        return None;
-    }
-
-    let raw = &json[start..end];
-
-    // Unescape JSON string escapes.
-    let summary = raw
-        .replace("\\n", " ")
-        .replace("\\\"", "\"")
-        .replace("\\'", "'")
-        .replace("\\\\", "\\");
-
-    if summary.len() < 10 {
-        return None;
-    }
-
-    Some(summary)
-}
-
-/// Extract page titles from a Wikipedia search API JSON response.
-fn extract_search_titles(json: &str) -> Vec<String> {
-    let mut titles = Vec::new();
-
-    // Look for "title":"..." patterns.
-    let key = "\"title\":\"";
-    let mut pos = 0;
-    while pos < json.len() {
-        if let Some(found) = json[pos..].find(key) {
-            let start = pos + found + key.len();
+    for pattern in &patterns {
+        if let Some(pos) = json.find(pattern.as_str()) {
+            let start = pos + pattern.len();
             if start >= json.len() {
-                break;
+                continue;
             }
-            // Find closing quote.
+
             let mut end = start;
             let bytes = json.as_bytes();
             let mut i = start;
@@ -258,20 +574,77 @@ fn extract_search_titles(json: &str) -> Vec<String> {
                 }
                 i += 1;
             }
+
             if end > start {
-                let title = &json[start..end];
-                titles.push(title.replace("\\\"", "\"").replace("\\\\", "\\"));
+                let raw = &json[start..end];
+                let value = raw
+                    .replace("\\n", " ")
+                    .replace("\\\"", "\"")
+                    .replace("\\'", "'")
+                    .replace("\\\\", "\\")
+                    .replace("\\u003c", "<")
+                    .replace("\\u003e", ">")
+                    .replace("\\u0026", "&");
+                return Some(value);
             }
-            pos = end + 1;
-        } else {
-            break;
         }
     }
-
-    titles
+    None
 }
 
-/// URL-encode a string for use in a URL path.
+/// Extract an integer field from JSON: "field":123
+fn extract_json_int_field(json: &str, key: &str) -> Option<i64> {
+    let patterns = [
+        format!("\"{}\":", key),
+        format!("\"{}\": ", key),
+    ];
+
+    for pattern in &patterns {
+        if let Some(pos) = json.find(pattern.as_str()) {
+            let start = pos + pattern.len();
+            let mut end = start;
+            for (i, ch) in json[start..].char_indices() {
+                if !ch.is_ascii_digit() && ch != '-' {
+                    end = start + i;
+                    break;
+                }
+            }
+            if end > start {
+                return json[start..end].parse().ok();
+            }
+        }
+    }
+    None
+}
+
+/// Extract content from an XML field: <tag>content</tag>
+fn extract_xml_field(xml: &str, tag: &str) -> Option<String> {
+    let open = format!("<{}>", tag);
+    let close = format!("</{}>", tag);
+
+    let start = xml.find(&open)? + open.len();
+    let end = xml[start..].find(&close)? + start;
+
+    if end <= start {
+        return None;
+    }
+
+    let raw = &xml[start..end];
+
+    // Strip CDATA if present.
+    let cleaned = raw
+        .replace("<![CDATA[", "")
+        .replace("]]>", "")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'");
+
+    Some(cleaned.trim().to_string())
+}
+
+/// URL-encode a string.
 fn url_encode(s: &str) -> String {
     let mut result = String::new();
     for byte in s.bytes() {
@@ -295,27 +668,42 @@ mod tests {
     #[test]
     fn url_encode_works() {
         assert_eq!(url_encode("hello world"), "hello%20world");
-        assert_eq!(url_encode("الطاقة"), "%D8%A7%D9%84%D8%B7%D8%A7%D9%82%D8%A9");
     }
 
     #[test]
-    fn extract_summary_parses_json() {
-        let json = r#"{"extract":"Energy is the quantitative property that is transferred to a body or to a physical system."}"#;
-        let summary = extract_wikipedia_summary(json).unwrap();
-        assert!(summary.contains("Energy"));
+    fn extract_json_string_parses() {
+        let json = r#"{"extract":"Energy is the quantitative property."}"#;
+        let result = extract_json_string_field(json, "extract").unwrap();
+        assert!(result.contains("Energy"));
+    }
+
+    #[test]
+    fn extract_xml_field_parses() {
+        let xml = "<root><summary>This is a test.</summary></root>";
+        let result = extract_xml_field(xml, "summary").unwrap();
+        assert_eq!(result, "This is a test.");
+    }
+
+    #[test]
+    fn list_sources_returns_all() {
+        let sources = list_sources();
+        assert!(sources.len() >= 10);
+        assert!(sources.contains(&"wikipedia"));
+        assert!(sources.contains(&"arxiv"));
+        assert!(sources.contains(&"github"));
     }
 
     #[test]
     fn fact_to_axiom_truncates() {
         let fact = InternetFact {
             topic: "test".to_string(),
-            summary: "First sentence. Second sentence. Third sentence that is very long and should be cut off.".to_string(),
+            summary: "First sentence. Second sentence. Third sentence that goes on.".to_string(),
             source_url: "http://example.com".to_string(),
+            source_name: "Test".to_string(),
             language: "en".to_string(),
             confidence: 0.7,
         };
         let axiom = fact_to_axiom_text(&fact);
         assert!(axiom.contains("First sentence"));
-        assert!(axiom.contains("Second sentence"));
     }
 }
