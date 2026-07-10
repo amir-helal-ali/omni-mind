@@ -993,10 +993,11 @@ footer {
   <div class="query-form">
     <input type="text" id="query" placeholder="اكتب سؤالك هنا..." autofocus>
     <button onclick="askQuery()">اسأل</button>
-    <button onclick="learnFromInternet()" style="background:var(--cyan);color:var(--void);font-weight:700;">🌐 تعلّم من الإنترنت</button>
+    <button onclick="learnFromInternet()" style="background:var(--cyan);color:var(--void);font-weight:700;">🌐 تعلّم</button>
   </div>
   <div class="loading" id="loading">جاري المعالجة عبر 7 طبقات...</div>
-  <div class="answer-box empty" id="answer">ستظهر الإجابة هنا</div>
+  
+  <div id="chat-history" style="max-height:500px;overflow-y:auto;margin:15px 0;padding:10px;background:rgba(0,0,0,0.3);border-radius:12px;"></div>
 
   <div class="examples">
     <h4>أسئلة تجريبية:</h4>
@@ -1029,12 +1030,32 @@ footer {
 </footer>
 
 <script>
+let chatMessages = [];
+
+function addMessage(role, text) {
+  chatMessages.push({role, text});
+  const history = document.getElementById('chat-history');
+  const div = document.createElement('div');
+  div.style.cssText = role === 'user'
+    ? 'margin:8px 0;padding:12px 16px;background:var(--cyan);color:var(--void);border-radius:16px 16px 4px 16px;max-width:70%;margin-right:auto;font-weight:500;white-space:pre-wrap;'
+    : 'margin:8px 0;padding:12px 16px;background:rgba(255,255,255,0.1);color:var(--text);border-radius:16px 16px 16px 4px;max-width:85%;margin-left:auto;white-space:pre-wrap;line-height:1.6;';
+  const label = document.createElement('div');
+  label.style.cssText = 'font-size:11px;opacity:0.6;margin-bottom:4px;font-weight:700;';
+  label.textContent = role === 'user' ? '👤 أنت' : '🧠 Omni-Mind';
+  const content = document.createElement('div');
+  content.textContent = text;
+  div.appendChild(label);
+  div.appendChild(content);
+  history.appendChild(div);
+  history.scrollTop = history.scrollHeight;
+}
+
 async function askQuery() {
   const q = document.getElementById('query').value;
   if (!q) return;
+  document.getElementById('query').value = '';
+  addMessage('user', q);
   document.getElementById('loading').classList.add('active');
-  document.getElementById('answer').classList.add('empty');
-  document.getElementById('answer').textContent = 'جاري المعالجة...';
   try {
     const res = await fetch('/api/query', {
       method: 'POST',
@@ -1042,10 +1063,13 @@ async function askQuery() {
       body: JSON.stringify({query: q})
     });
     const data = await res.json();
-    document.getElementById('answer').classList.remove('empty');
-    document.getElementById('answer').textContent = data.answer || data.error;
+    let display = data.answer || data.error;
+    if (data.auto_learned && data.sources_count) {
+      display += '\\n\\n📡 تم التعلم من ' + data.sources_count + ' مصدر إنترنت';
+    }
+    addMessage('ai', display);
   } catch(e) {
-    document.getElementById('answer').textContent = 'خطأ: ' + e.message;
+    addMessage('ai', 'خطأ: ' + e.message);
   }
   document.getElementById('loading').classList.remove('active');
   loadStats();
@@ -1092,9 +1116,9 @@ async function learnFromInternet() {
     alert('اكتب موضوعاً في خانة البحث أولاً');
     return;
   }
+  document.getElementById('query').value = '';
+  addMessage('user', '🌐 تعلّم عن: ' + q);
   document.getElementById('loading').classList.add('active');
-  document.getElementById('answer').classList.add('empty');
-  document.getElementById('answer').textContent = '🌐 جاري التعلم من مصادر متعددة...';
   try {
     const lang = /[\u0600-\u06FF]/.test(q) ? 'ar' : 'en';
     const res = await fetch('/api/learn', {
@@ -1103,25 +1127,18 @@ async function learnFromInternet() {
       body: JSON.stringify({topic: q, lang: lang})
     });
     const data = await res.json();
-    document.getElementById('answer').classList.remove('empty');
     if (data.status === 'learned') {
       let sourcesList = '';
       if (data.sources && data.sources.length > 0) {
-        sourcesList = '\n\n📚 المصادر المستخدمة:\n';
-        data.sources.forEach(s => {
-          sourcesList += '  • ' + s.name + ': ' + s.url + '\n';
-        });
+        sourcesList = '\n📚 المصادر:\n';
+        data.sources.forEach(s => { sourcesList += '  • ' + s.name + '\n'; });
       }
-      document.getElementById('answer').textContent =
-        '✓ تم التعلم من ' + data.sources_count + ' مصادر!\n\n' +
-        'الموضوع: ' + data.topic + '\n' +
-        'البديهية الجديدة: ' + data.axiom + '\n' +
-        'المجال: ' + data.domain + sourcesList;
+      addMessage('ai', '✓ تم التعلم من ' + data.sources_count + ' مصادر!\n\nالموضوع: ' + data.topic + '\nالبديهية: ' + data.axiom + sourcesList);
     } else {
-      document.getElementById('answer').textContent = 'فشل التعلم: ' + (data.error || 'غير معروف');
+      addMessage('ai', 'فشل التعلم: ' + (data.error || 'غير معروف'));
     }
   } catch(e) {
-    document.getElementById('answer').textContent = 'خطأ: ' + e.message;
+    addMessage('ai', 'خطأ: ' + e.message);
   }
   document.getElementById('loading').classList.remove('active');
   loadStats();
