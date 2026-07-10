@@ -313,6 +313,11 @@ fn handle_query(body: &str) -> (&'static str, &'static str, String) {
 
     log::info!("Query: {}", query);
 
+    // ─── Check if this is a non-knowledge question (time, weather, etc.) ───
+    if is_non_knowledge_query(&query) {
+        return handle_non_knowledge_query(&query);
+    }
+
     // Step 1: Try the internal knowledge base first.
     let internal_answer = ffi::safe_query(&query);
 
@@ -440,8 +445,248 @@ fn handle_query(body: &str) -> (&'static str, &'static str, String) {
     }
 }
 
-/// Extract confidence percentage from an answer string.
-/// Looks for "الثقة: XX%" or "Confidence: XX%" patterns.
+/// Check if this is a non-knowledge question (time, weather, date, etc.)
+/// that shouldn't be searched in the knowledge base or internet.
+fn is_non_knowledge_query(query: &str) -> bool {
+    let q = query.to_lowercase();
+    let q_trimmed = q.trim();
+
+    // Time queries
+    let time_patterns = [
+        "what time", "what's the time", "whats the time", "current time",
+        "time now", "what time is it",
+    ];
+    let time_patterns_ar = [
+        "كم الساعة", "كم الساعه", "الساعة كم", "الساعه كم",
+        "وقت", "الوقت الآن", "الوقت الان",
+    ];
+    for p in &time_patterns {
+        if q_trimmed.contains(p) { return true; }
+    }
+    for p in &time_patterns_ar {
+        if query.contains(p) { return true; }
+    }
+
+    // Date queries
+    let date_patterns = [
+        "what date", "what's the date", "today's date", "todays date",
+        "what day", "what's today", "what day is it",
+    ];
+    let date_patterns_ar = [
+        "كم التاريخ", "التاريخ كم", "ايه التاريخ", "شنو التاريخ",
+        "يوم ايه", "اليوم ايه", "ايه اليوم",
+    ];
+    for p in &date_patterns {
+        if q_trimmed.contains(p) { return true; }
+    }
+    for p in &date_patterns_ar {
+        if query.contains(p) { return true; }
+    }
+
+    // Weather queries (these need a weather API, not knowledge)
+    let weather_patterns = [
+        "weather", "temperature outside", "how hot is it", "how cold is it",
+    ];
+    let weather_patterns_ar = [
+        "الطقس", "الجو", "حرارة", "الحرارة كم",
+    ];
+    for p in &weather_patterns {
+        if q_trimmed.contains(p) { return true; }
+    }
+    for p in &weather_patterns_ar {
+        if query.contains(p) { return true; }
+    }
+
+    // Calculator queries
+    if is_math_expression(query) {
+        return true;
+    }
+
+    false
+}
+
+/// Check if the query is a simple math expression (e.g., "2+2", "5*3")
+fn is_math_expression(query: &str) -> bool {
+    let q = query.trim();
+    if q.is_empty() || q.len() > 100 {
+        return false;
+    }
+
+    // Must contain at least one digit and one operator
+    let has_digit = q.chars().any(|c| c.is_ascii_digit());
+    let has_op = q.chars().any(|c| c == '+' || c == '-' || c == '*' || c == '/' || c == '%');
+
+    // Check if it's ONLY digits, operators, spaces, and parentheses
+    let is_math = q.chars().all(|c| {
+        c.is_ascii_digit() || c == '+' || c == '-' || c == '*' || c == '/'
+        || c == '%' || c == ' ' || c == '(' || c == ')' || c == '.'
+    });
+
+    has_digit && has_op && is_math
+}
+
+/// Handle non-knowledge queries (time, date, weather, math).
+fn handle_non_knowledge_query(query: &str) -> (&'static str, &'static str, String) {
+    let q = query.to_lowercase();
+
+    // ─── Time query ───
+    let is_time = q.contains("time") || q.contains("ساعة") || q.contains("ساعه") || q.contains("وقت");
+    if is_time {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Simple UTC time calculation
+        let hours_utc = (now / 3600) % 24;
+        let minutes = (now / 60) % 60;
+        let seconds = now % 60;
+
+        // Check if Arabic
+        let is_ar = query.contains("ساعة") || query.contains("ساعه") || query.contains("وقت");
+        let answer = if is_ar {
+            format!(
+                "الساعة الآن {:02}:{:02}:{:02} بتوقيت UTC. أنا لا أعرف منطقتك الزمنية، لكن يمكنك حساب الوقت المحلي بإضافة أو طرح الفرق عن UTC.",
+                hours_utc, minutes, seconds
+            )
+        } else {
+            format!(
+                "The current time is {:02}:{:02}:{:02} UTC. I don't know your timezone, but you can calculate your local time by adding or subtracting the offset from UTC.",
+                hours_utc, minutes, seconds
+            )
+        };
+
+        let json = format!(
+            r#"{{"query":"{}","answer":"{}","source":"system","type":"time"}}"#,
+            escape_json(query),
+            escape_json(&answer)
+        );
+        return ("200 OK", "application/json", json);
+    }
+
+    // ─── Date query ───
+    let is_date = q.contains("date") || q.contains("day") || q.contains("تاريخ") || q.contains("يوم");
+    if is_date {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let days_since_epoch = now / 86400;
+        let day_of_week = (days_since_epoch + 4) % 7; // 1970-01-01 was Thursday (4)
+
+        let day_names_en = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        let day_names_ar = ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+
+        let is_ar = query.contains("تاريخ") || query.contains("يوم");
+        let answer = if is_ar {
+            format!("اليوم هو {} (حسب توقيت UTC).", day_names_ar[day_of_week as usize])
+        } else {
+            format!("Today is {} (UTC time).", day_names_en[day_of_week as usize])
+        };
+
+        let json = format!(
+            r#"{{"query":"{}","answer":"{}","source":"system","type":"date"}}"#,
+            escape_json(query),
+            escape_json(&answer)
+        );
+        return ("200 OK", "application/json", json);
+    }
+
+    // ─── Math expression ───
+    if is_math_expression(query) {
+        let result = eval_math(query.trim());
+        let is_ar = false; // Math is universal
+        let answer = if is_ar {
+            format!("النتيجة: {}", result)
+        } else {
+            format!("The result is: {}", result)
+        };
+
+        let json = format!(
+            r#"{{"query":"{}","answer":"{}","source":"calculator","type":"math"}}"#,
+            escape_json(query),
+            escape_json(&answer)
+        );
+        return ("200 OK", "application/json", json);
+    }
+
+    // ─── Weather (can't actually do this without an API) ───
+    let is_ar = query.contains("طقس") || query.contains("جو") || query.contains("حرارة");
+    let answer = if is_ar {
+        "للأسف لا أستطيع التحقق من الطقس الحالي — أنا لا أعرف موقعك الجغرافي. يمكنك التحقق من تطبيق الطقس على هاتفك أو البحث في Google.".to_string()
+    } else {
+        "Unfortunately, I can't check the current weather — I don't know your geographic location. You can check the weather app on your phone or search Google.".to_string()
+    };
+
+    let json = format!(
+        r#"{{"query":"{}","answer":"{}","source":"system","type":"weather"}}"#,
+        escape_json(query),
+        escape_json(&answer)
+    );
+    ("200 OK", "application/json", json)
+}
+
+/// Simple math expression evaluator (supports +, -, *, /, %, parentheses).
+fn eval_math(expr: &str) -> f64 {
+    // Simple recursive descent parser
+    let chars: Vec<char> = expr.chars().filter(|c| !c.is_whitespace()).collect();
+    let mut pos = 0;
+    parse_expression(&chars, &mut pos).unwrap_or(f64::NAN)
+}
+
+fn parse_expression(chars: &[char], pos: &mut usize) -> Option<f64> {
+    let mut left = parse_term(chars, pos)?;
+
+    while *pos < chars.len() {
+        match chars[*pos] {
+            '+' => { *pos += 1; let right = parse_term(chars, pos)?; left += right; }
+            '-' => { *pos += 1; let right = parse_term(chars, pos)?; left -= right; }
+            _ => break,
+        }
+    }
+    Some(left)
+}
+
+fn parse_term(chars: &[char], pos: &mut usize) -> Option<f64> {
+    let mut left = parse_factor(chars, pos)?;
+
+    while *pos < chars.len() {
+        match chars[*pos] {
+            '*' => { *pos += 1; let right = parse_factor(chars, pos)?; left *= right; }
+            '/' => { *pos += 1; let right = parse_factor(chars, pos)?; left /= right; }
+            '%' => { *pos += 1; let right = parse_factor(chars, pos)?; left %= right; }
+            _ => break,
+        }
+    }
+    Some(left)
+}
+
+fn parse_factor(chars: &[char], pos: &mut usize) -> Option<f64> {
+    if *pos >= chars.len() { return None; }
+
+    if chars[*pos] == '(' {
+        *pos += 1;
+        let result = parse_expression(chars, pos)?;
+        if *pos < chars.len() && chars[*pos] == ')' { *pos += 1; }
+        return Some(result);
+    }
+
+    if chars[*pos] == '-' {
+        *pos += 1;
+        return Some(-parse_factor(chars, pos)?);
+    }
+
+    // Parse number
+    let start = *pos;
+    while *pos < chars.len() && (chars[*pos].is_ascii_digit() || chars[*pos] == '.') {
+        *pos += 1;
+    }
+    if *pos == start { return None; }
+    let num_str: String = chars[start..*pos].iter().collect();
+    num_str.parse().ok()
+}
+
 fn extract_confidence_from_answer(answer: &str) -> f64 {
     // Try Arabic pattern first.
     if let Some(pos) = answer.find("الثقة") {
