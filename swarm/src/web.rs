@@ -27,7 +27,15 @@ pub fn run(port: u16) {
     }
 
     log::info!("Omni-Mind web server listening on http://0.0.0.0:{}", port);
-    log::info!("Endpoints: / /api/query /api/stats /api/health /api/metrics /api/ingest");
+    log::info!("Endpoints: / /api/query /api/stats /api/health /api/metrics /api/ingest /api/learn /api/search");
+
+    // ─── Spawn background auto-learning thread ───
+    // This thread continuously learns about new topics from the internet,
+    // expanding the knowledge base without user interaction.
+    std::thread::spawn(move || {
+        background_auto_learner(port);
+    });
+    log::info!("Background auto-learner started — system will learn autonomously");
 
     let shutdown = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
@@ -79,6 +87,111 @@ pub fn run(port: u16) {
     // Give in-flight requests 1 second to complete.
     std::thread::sleep(std::time::Duration::from_secs(1));
     log::info!("Server stopped.");
+}
+
+/// Background auto-learner — continuously expands the knowledge base
+/// by learning about trending and diverse topics from the internet.
+///
+/// This runs in a background thread and:
+///   1. Starts learning after a 30-second delay (let the server stabilize)
+///   2. Learns about a diverse set of topics across all 16 domains
+///   3. Waits 60 seconds between each learning cycle (to avoid rate limiting)
+///   4. Runs indefinitely until the server shuts down
+///
+/// The topics are curated to cover diverse knowledge areas, ensuring
+/// the system becomes a well-rounded expert over time.
+fn background_auto_learner(_port: u16) {
+    // Wait 30 seconds for the server to stabilize.
+    std::thread::sleep(std::time::Duration::from_secs(30));
+    log::info!("Auto-learner: starting autonomous knowledge expansion");
+
+    // Curated list of diverse topics to learn about.
+    // Covers all 16 domains for well-rounded knowledge.
+    let topics = [
+        // Physics
+        "quantum mechanics", "relativity", "thermodynamics", "string theory",
+        // Chemistry
+        "periodic table", "chemical bonds", "organic chemistry", "biochemistry",
+        // Biology
+        "evolution", "genetics", "ecology", "neuroscience",
+        // Mathematics
+        "calculus", "linear algebra", "number theory", "topology",
+        // Computer Science
+        "artificial intelligence", "blockchain", "quantum computing", "cybersecurity",
+        // Economics
+        "behavioral economics", "game theory", "macroeconomics", "cryptocurrency",
+        // Philosophy
+        "existentialism", "ethics", "epistemology", "phenomenology",
+        // Psychology
+        "cognitive psychology", "social psychology", "neurolinguistics", "behaviorism",
+        // History
+        "ancient civilizations", "industrial revolution", "world wars", "cold war",
+        // Linguistics
+        "phonology", "syntax", "semantics", "sociolinguistics",
+        // Astronomy
+        "black holes", "exoplanets", "dark matter", "cosmology",
+        // Geology
+        "plate tectonics", "mineralogy", "paleontology", "volcanology",
+        // Medicine
+        "immunology", "pharmacology", "epidemiology", "gene therapy",
+        // Engineering
+        "robotics", "nanotechnology", "aerospace engineering", "biomedical engineering",
+        // Political Science
+        "democracy", "geopolitics", "international relations", "political theory",
+        // Extra cutting-edge
+        "CRISPR", "fusion energy", "climate change", "machine learning",
+        "neural networks", "deep learning", "natural language processing",
+        "computer vision", "reinforcement learning", "GPT",
+        "metaverse", "web3", "quantum entanglement", "dark energy",
+        "consciousness", "free will", "memory", "dreams",
+        "cancer", "Alzheimer", "diabetes", "COVID-19",
+        "Python programming", "Rust programming", "JavaScript", "TypeScript",
+        "Docker", "Kubernetes", "microservices", "DevOps",
+        "renewable energy", "battery technology", "electric vehicles", "solar power",
+    ];
+
+    let mut index: usize = 0;
+    let mut total_learned: usize = 0;
+
+    loop {
+        if index >= topics.len() {
+            // Completed one full cycle — restart from beginning.
+            index = 0;
+            log::info!("Auto-learner: completed full cycle ({} topics learned). Restarting...", total_learned);
+            // Wait 5 minutes before restarting the cycle.
+            std::thread::sleep(std::time::Duration::from_secs(300));
+        }
+
+        let topic = topics[index];
+        log::info!("Auto-learner: learning about '{}'...", topic);
+
+        // Search the internet for this topic.
+        let knowledge = crate::internet::search_all_sources(topic, "en");
+
+        if !knowledge.facts.is_empty() {
+            let axiom_text = crate::internet::aggregated_to_axiom(&knowledge);
+            let domain = guess_domain(topic);
+
+            // Ingest the new knowledge.
+            match ffi::safe_inject_axiom(domain, &axiom_text, 0.7) {
+                Ok(()) => {
+                    total_learned += 1;
+                    log::info!("Auto-learner: ✓ learned '{}' from {} sources (total: {})",
+                        topic, knowledge.sources_count, total_learned);
+                }
+                Err(e) => {
+                    log::warn!("Auto-learner: failed to ingest '{}' (code {})", topic, e);
+                }
+            }
+        } else {
+            log::debug!("Auto-learner: no info found for '{}'", topic);
+        }
+
+        index += 1;
+
+        // Wait 60 seconds between topics (to avoid rate limiting).
+        std::thread::sleep(std::time::Duration::from_secs(60));
+    }
 }
 
 fn handle_request(mut stream: TcpStream) {
@@ -198,17 +311,225 @@ fn handle_query(body: &str) -> (&'static str, &'static str, String) {
             r#"{"error":"missing query"}"#.to_string());
     }
 
-    match ffi::safe_query(&query) {
+    log::info!("Query: {}", query);
+
+    // Step 1: Try the internal knowledge base first.
+    let internal_answer = ffi::safe_query(&query);
+
+    match internal_answer {
         Ok(answer) => {
-            let json = format!(r#"{{"query":"{}","answer":"{}"}}"#,
+            // Check if the answer has low confidence.
+            // The Zig side appends "— الثقة: XX%" or "— Confidence: XX%".
+            let confidence = extract_confidence_from_answer(&answer);
+            log::info!("Internal answer confidence: {:.0}%", confidence);
+
+            // If confidence is high enough, return immediately.
+            if confidence >= 50.0 {
+                let json = format!(r#"{{"query":"{}","answer":"{}","source":"internal","confidence":{:.0}}}"#,
+                    escape_json(&query),
+                    escape_json(&answer),
+                    confidence);
+                return ("200 OK", "application/json", json);
+            }
+
+            // Step 2: Low confidence — auto-search the internet BEFORE answering.
+            log::info!("Low confidence ({:.0}%) — auto-searching internet...", confidence);
+
+            // Extract the key topic from the query for internet search.
+            let topic = extract_topic_from_query(&query);
+            let lang = if query.chars().any(|c| c >= '\u{0600}' && c <= '\u{06FF}') { "ar" } else { "en" };
+
+            // Search all internet sources.
+            let knowledge = crate::internet::search_all_sources(&topic, lang);
+
+            if !knowledge.facts.is_empty() {
+                // We found info on the internet — ingest it and re-answer.
+                let axiom_text = crate::internet::aggregated_to_axiom(&knowledge);
+                let domain = guess_domain(&topic);
+
+                log::info!("Learned from {} internet sources, re-answering...", knowledge.sources_count);
+
+                // Ingest the new knowledge.
+                let _ = ffi::safe_inject_axiom(domain, &axiom_text, 0.75);
+
+                // Re-query with the new knowledge.
+                match ffi::safe_query(&query) {
+                    Ok(reanswer) => {
+                        let new_confidence = extract_confidence_from_answer(&reanswer);
+                        let sources_list: Vec<String> = knowledge.facts.iter()
+                            .map(|f| format!(r#"{{"name":"{}","url":"{}"}}"#, escape_json(&f.source_name), escape_json(&f.source_url)))
+                            .collect();
+
+                        let json = format!(
+                            r#"{{"query":"{}","answer":"{}","source":"internet+internal","confidence":{:.0},"auto_learned":true,"sources_count":{},"sources":[{}]}}"#,
+                            escape_json(&query),
+                            escape_json(&reanswer),
+                            new_confidence,
+                            knowledge.sources_count,
+                            sources_list.join(",")
+                        );
+                        return ("200 OK", "application/json", json);
+                    }
+                    Err(_) => {
+                        // Re-query failed — return the internet knowledge directly.
+                        let combined: String = knowledge.facts.iter()
+                            .map(|f| format!("[{}] {}", f.source_name, f.summary))
+                            .collect::<Vec<_>>()
+                            .join("\n\n");
+
+                        let json = format!(
+                            r#"{{"query":"{}","answer":"{}","source":"internet","auto_learned":true,"sources_count":{}}}"#,
+                            escape_json(&query),
+                            escape_json(&combined),
+                            knowledge.sources_count
+                        );
+                        return ("200 OK", "application/json", json);
+                    }
+                }
+            }
+
+            // Internet search found nothing — return the internal answer as-is.
+            let json = format!(r#"{{"query":"{}","answer":"{}","source":"internal","confidence":{:.0}}}"#,
                 escape_json(&query),
-                escape_json(&answer));
+                escape_json(&answer),
+                confidence);
             ("200 OK", "application/json", json)
         }
         Err(e) => {
+            // Internal query completely failed — try internet as fallback.
+            log::info!("Internal query failed (code {}) — trying internet fallback...", e);
+
+            let topic = extract_topic_from_query(&query);
+            let lang = if query.chars().any(|c| c >= '\u{0600}' && c <= '\u{06FF}') { "ar" } else { "en" };
+            let knowledge = crate::internet::search_all_sources(&topic, lang);
+
+            if !knowledge.facts.is_empty() {
+                let axiom_text = crate::internet::aggregated_to_axiom(&knowledge);
+                let domain = guess_domain(&topic);
+                let _ = ffi::safe_inject_axiom(domain, &axiom_text, 0.75);
+
+                // Try internal query again with new knowledge.
+                if let Ok(reanswer) = ffi::safe_query(&query) {
+                    let json = format!(
+                        r#"{{"query":"{}","answer":"{}","source":"internet-fallback","auto_learned":true,"sources_count":{}}}"#,
+                        escape_json(&query),
+                        escape_json(&reanswer),
+                        knowledge.sources_count
+                    );
+                    return ("200 OK", "application/json", json);
+                }
+
+                // Return internet knowledge directly.
+                let combined: String = knowledge.facts.iter()
+                    .map(|f| format!("[{}] {}", f.source_name, f.summary))
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+
+                let json = format!(
+                    r#"{{"query":"{}","answer":"{}","source":"internet","auto_learned":true,"sources_count":{}}}"#,
+                    escape_json(&query),
+                    escape_json(&combined),
+                    knowledge.sources_count
+                );
+                return ("200 OK", "application/json", json);
+            }
+
             let json = format!(r#"{{"error":"query failed: code {}"}}"#, e);
             ("500 Internal Server Error", "application/json", json)
         }
+    }
+}
+
+/// Extract confidence percentage from an answer string.
+/// Looks for "الثقة: XX%" or "Confidence: XX%" patterns.
+fn extract_confidence_from_answer(answer: &str) -> f64 {
+    // Try Arabic pattern first.
+    if let Some(pos) = answer.find("الثقة") {
+        let rest = &answer[pos..];
+        // Find the first number after "الثقة".
+        let mut start = 0;
+        let mut found_digit = false;
+        for (i, ch) in rest.char_indices() {
+            if ch.is_ascii_digit() {
+                if !found_digit {
+                    start = i;
+                    found_digit = true;
+                }
+            } else if found_digit && ch != '.' && ch != '%' {
+                let num_str = &rest[start..i];
+                if let Ok(val) = num_str.parse::<f64>() {
+                    return val;
+                }
+                break;
+            }
+        }
+    }
+
+    // Try English pattern.
+    if let Some(pos) = answer.find("Confidence") {
+        let rest = &answer[pos..];
+        let mut start = 0;
+        let mut found_digit = false;
+        for (i, ch) in rest.char_indices() {
+            if ch.is_ascii_digit() {
+                if !found_digit {
+                    start = i;
+                    found_digit = true;
+                }
+            } else if found_digit && ch != '.' && ch != '%' {
+                let num_str = &rest[start..i];
+                if let Ok(val) = num_str.parse::<f64>() {
+                    return val;
+                }
+                break;
+            }
+        }
+    }
+
+    // Default: assume moderate confidence (50%).
+    50.0
+}
+
+/// Extract the main topic from a query for internet search.
+/// Removes question words and extracts the key concept.
+fn extract_topic_from_query(query: &str) -> String {
+    let q = query.trim();
+
+    // Remove common question prefixes.
+    let prefixes = [
+        "what is ", "what are ", "what's ", "what ",
+        "who is ", "who are ", "who ",
+        "how does ", "how do ", "how is ", "how are ", "how ",
+        "why does ", "why do ", "why is ", "why are ", "why ",
+        "when did ", "when was ", "when ",
+        "where is ", "where are ", "where ",
+        "can you ", "could you ", "tell me about ", "explain ",
+        "describe ", "define ",
+        "ما هو ", "ما هي ", "ماذا ", "متى ", "أين ", "كيف ", "لماذا ",
+        "من هو ", "من هي ", "من ", "هل ", "اشرح ", "عرّف ", "صف ",
+    ];
+
+    let mut topic = q.to_lowercase();
+    for prefix in &prefixes {
+        if topic.starts_with(prefix) {
+            topic = topic[prefix.len()..].to_string();
+            break;
+        }
+    }
+
+    // Remove trailing punctuation.
+    topic = topic.trim_end_matches(|c: char| !c.is_alphanumeric() && c != ' ').trim().to_string();
+
+    // If topic is too long, take first few words.
+    let words: Vec<&str> = topic.split_whitespace().collect();
+    if words.len() > 5 {
+        topic = words[..5].join(" ");
+    }
+
+    if topic.is_empty() {
+        q.to_string()
+    } else {
+        topic
     }
 }
 
