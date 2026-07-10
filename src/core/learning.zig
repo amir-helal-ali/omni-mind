@@ -271,7 +271,7 @@ pub const LearningEngine = struct {
 
     /// Look up a learned pattern for a query.
     /// Returns the axiom_id if a strong pattern matches, or 0 if none.
-    pub fn lookupPattern(self: *const LearningEngine, query: []const u8) u32 {
+    pub fn lookupPattern(self: *LearningEngine, query: []const u8) u32 {
         if (self.pattern_count == 0) return 0;
 
         var sig: [128]u8 = undefined;
